@@ -50,11 +50,11 @@ def RovCP(f):
     R = []
     for I in np.linspace(10,200,199):
         I = int(I)
-        fr = f[I:2*I].mean()
-        fl = f[:I].mean()
+        fr = f[I:2*I].std()
+        fl = f[:I].std()
         r = fr/fl
         R.append(r)
-    I = nearestPoint(np.array(R), 1)
+    I = nearestPoint(np.array(R), 1) + 10
     print('I = %i' %I)
     rov = ROV(f, I)
     cp = (rov.argmax() + I)
@@ -169,7 +169,7 @@ def GofCP(f, x, model, mp=0.95):
 
 
 if __name__ == "__main__":
-    from ForceMap import ForceCurve
+    from ForceMetric import ForceCurve
     # path = '/media/jacob/MicroscopyData/Data/AFM/PCL/16-07-04 viscosities/H20/B2_H20_1um_0002.ibw'
     # path = '/media/jacob/MicroscopyData/Data/AFM/PCL/16-07-04 viscosities/H20/B2_H20_10um_0153.ibw'
     # fc = ForceCurve(path)
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     nu_s = .33
     Er = 1./((1 - nu_s**2)/Es + (1 - nu_t**2)/Et)
     G = 4./3 * np.sqrt(R)
-    A = G * Er 
+    A = G * Er
     f = x*1
     f[x<0] = 0
     f = A * np.power(f,1.5)
@@ -219,10 +219,10 @@ if __name__ == "__main__":
     print("Multiply CP is: %i with dx = %.2e m\n" %(i4, d[3]))
     print("Gof CP is: %i with dx = %.2e m\n" %(i5, d[4]))
 
-    
+
     print("The winner is %s" %method[abs(d).argmin()])
 
-    
+
 
 
     plt.plot(ind - ind[i1], f - f[i1], label='Fit')

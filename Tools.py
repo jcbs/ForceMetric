@@ -2,6 +2,7 @@
 
 import numpy as np
 import itertools
+from PIL import Image, ImageDraw
 import scipy.ndimage as ndi
 from scipy.optimize import leastsq
 from scipy.interpolate import interp2d
@@ -15,6 +16,7 @@ from skimage import dtype_limits
 from scipy.signal import argrelmin, argrelmax
 from itertools import product
 from numpy import empty, roll
+from collections import defaultdict
 
 
 
@@ -74,6 +76,21 @@ def SimForce(x, E, g=10e-6, model='h', noise=4e-4):
         noise = 0
     f += noise
     return f
+
+
+def dijkstra(aGraph,start):
+    pq = PriorityQueue()
+    start.setDistance(0)
+    pq.buildHeap([(v.getDistance(),v) for v in aGraph])
+    while not pq.isEmpty():
+        currentVert = pq.delMin()
+        for nextVert in currentVert.getConnections():
+            newDist = currentVert.getDistance() \
+                    + currentVert.getWeight(nextVert)
+            if newDist < nextVert.getDistance():
+                nextVert.setDistance( newDist )
+                nextVert.setPred(currentVert)
+                pq.decreaseKey(nextVert,newDist)
 
 
 def ForceFitPowerlaw(p0, f, x, model='h'):
@@ -239,14 +256,14 @@ def LongitudinalWallsAlt(topo, topo_threshold=1):
     labels[mask4] = 4
     mask = canny(theta, sigma=5, use_quantiles=True,
             low_threshold=.83, high_threshold=0.95)
-    topo_mask = img > topo_threshold*np.nanmean(img) 
+    topo_mask = img > topo_threshold*np.nanmean(img)
     mask[topo_mask] = False
     mask[mask2 | mask3] = False
     mask_long[topo_mask] = False
     lx, ly = np.where(mask_long)
     intervals = 8
     dx = int(256/intervals)
-    count, bins = np.histogram(ly, np.arange(intervals + 1)*dx) 
+    count, bins = np.histogram(ly, np.arange(intervals + 1)*dx)
     marker = np.zeros(topo.shape, dtype=bool)
     threshold = 1.0*count.std()
     # threshold = count.max() - .1*count.std()
@@ -255,7 +272,7 @@ def LongitudinalWallsAlt(topo, topo_threshold=1):
             marker[:,i*dx:(i+1)*dx] = 1
     mask = marker & mask
     lx, ly = np.where(mask)
-    count, bins = np.histogram(ly, np.arange(17)*16) 
+    count, bins = np.histogram(ly, np.arange(17)*16)
     marker = np.zeros(topo.shape, dtype=bool)
     threshold = 1.0*count.std()
     for i in range(16):
@@ -274,14 +291,14 @@ def LongitudinalWalls(topo, axis=1, padding=0, topo_threshold=.75):
     mask[lx, ly] = 1
     intervals = 8
     dx = int(256/intervals)
-    count, bins = np.histogram(ly, np.arange(intervals + 1)*dx) 
+    count, bins = np.histogram(ly, np.arange(intervals + 1)*dx)
     marker = np.zeros(topo.shape, dtype=bool)
     threshold = 1*count.std()
     for i in range(intervals):
         if count[i] > threshold:
             marker[:,i*dx:(i+1)*dx] = 1
     mask = marker & mask
-    topo_mask = img > topo_threshold*np.nanmean(img) 
+    topo_mask = img > topo_threshold*np.nanmean(img)
     mask[topo_mask] = False
     mx, my = np.where(mask)
     return mx, my
@@ -329,6 +346,88 @@ def smooth_with_function_and_mask(image, function, mask):
     output_image = smoothed_image / (bleed_over + np.finfo(float).eps)
     return output_image
 
+
+
+def MakeRoi(pts, geometry='polygon',  shape=(256, 256)):
+    shape = (shape[1], shape[0])
+    img = Image.new('L', shape, 0)
+    draw = ImageDraw.Draw(img)
+    if geometry is 'polygon':
+        draw.polygon(pts, outline=1, fill=1)
+    elif geometry is 'line':
+        draw.line(pts, fill=1)
+
+    mask = np.array(img, dtype=bool)
+    return mask
+
+
+def BarRoi(pos, width=20, direction='horizontal', shape=(256, 256)):
+    w = width/2.
+    if direction is 'horizontal':
+        pts = [(0, pos + w), (shape[0], pos + w),
+               (shape[0], pos - w), (0, pos -w)]
+    else:
+        pts = [(pos + w, 0), (pos + w, shape[1]),
+               (pos - w, shape[1]), (pos - w, 0)]
+
+    return MakeRoi(pts, shape=shape)
+
+
+def SquareRoi(pos, width=10, shape=(256, 256)):
+    w = width/2.
+    x, y = pos
+    pts = [(x - w, y -w), (x - w, y + w),
+           (x + w, y + w), (x + w, y - w)]
+    mask = MakeRoi(pts, shape=shape)
+    return mask
+
+
+def RectangularRoi(lower_left, upper_right, shape=(256, 256)):
+    v1 = lower_left
+    v3 = upper_right
+    v2 = (v1[0], v3[1])
+    v4 = (v3[0], v1[1])
+    pts = [v1, v2, v3, v4]
+    mask = MakeRoi(pts, shape=shape)
+    return mask
+
+
+def LineRoi(pts, width=20, shape=(256, 256)):
+    w = width/2.
+    mask = np.zeros(shape, dtype=bool)
+    for p in pts:
+        roi = SquareRoi(p, width=width, shape=shape)
+        mask = (mask | roi)
+    return mask
+
+
+def velocity(length, time, method='slope', sort_length=False):
+    """calculates velocity for length intervals"""
+    delta_t = np.roll(time, -1) - time
+
+    if sort_length:
+        length = np.sort(length)
+
+    if method == 'slope':
+        vel = (np.roll(length, -1) - length) / delta_t
+    elif method == 'gradient':
+        vel = np.gradient(length, time)
+    elif method == 'correlated gradient':
+        acc = (np.correlate(length, length, mode='full')[:len(time)])
+        vel = np.gradient(np.gradient(acc, time))
+    elif method == 'correlated velocity':
+        vel = (np.roll(length, -1) - length) / delta_t
+        vel = np.sqrt(np.abs((np.correlate(vel,
+                                           vel,
+                                           mode='full'
+                                           )[len(time)-1:]
+                              )
+                             )
+                      )
+
+    return vel
+
+
 def autocorrelate(x):
     """
     Compute the multidimensional autocorrelation of an nd array.
@@ -351,7 +450,7 @@ def autocorrelate(x):
     # iterate over all combinations of directional shifts
     for i in product(*ii):
         # extract the indexes for
-        # the autocorrelation array 
+        # the autocorrelation array
         # and original array respectively
         i1, i2 = asarray(i).T
 
@@ -364,7 +463,7 @@ def autocorrelate(x):
             # and the shifted array at the beginning
             x2 = x2[i0:]
 
-            # prepare to do the same for 
+            # prepare to do the same for
             # the next axis
             x1 = x1.transpose(t)
             x2 = x2.transpose(t)
