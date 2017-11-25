@@ -109,7 +109,7 @@ def IndentationFit(p, delta, gamma=2):
 
     """
 
-    return p[0] * delta**gamma
+    return p[0] * delta**gamma + p[1]
 
 
 def errfunc(p, data, delta, gamma=2):
@@ -815,13 +815,14 @@ class DynamicYoung(DynamicViscoelastic):
     def __init__ (self, amplitude=False, phase=False,
                   free_amplitude=1.e-9, free_phase=np.pi/2.,
                   near_amplitude=1.e-9, near_phase=np.pi/2.,
-                  Q=1., k=1., omega0=1.):
+                  Q=1., k=1., omega0=1., E0=3e7):
         DynamicViscoelastic.__init__(self, amplitude=amplitude, phase=phase,
                                      free_amplitude=free_amplitude, free_phase=free_phase,
                                      near_amplitude=near_amplitude, near_phase=near_phase,
                                      Q=Q, k=k, omega0=omega0)
+        self.E0 = E0
 
-    def Storage(self, model='Hertz',
+    def Storage(self, model='Sneddon',
                 F0=None, alpha=15*np.pi/180, nu=.5, R=10e-9):
         Sneddon = ['Sneddon', 'sneddon', 'S', 's']
         Hertz = ['Hertz', 'hertz', 'H', 'h']
@@ -829,11 +830,32 @@ class DynamicYoung(DynamicViscoelastic):
             F0 = self.F0
 
         if model in Sneddon:
-            SneddonFactor = np.tan(alpha)*2/np.pi*(1 - nu**2)
+            SneddonFactor = np.tan(alpha)*8/np.pi*(1 - nu**2)
             E = (self.conservative()/np.sqrt(F0))**2/SneddonFactor
         elif model in Hertz:
             E = (np.sqrt(0.5 * self.conservative() *
                             (4./(3*F0))**(1./3))**3 / np.sqrt(R))
+
+        return E
+
+    def MyStorage(self, model='Sneddon',
+                F0=None, alpha=15*np.pi/180, nu=.5, R=10e-9, E0=None):
+        Sneddon = ['Sneddon', 'sneddon', 'S', 's']
+        Hertz = ['Hertz', 'hertz', 'H', 'h']
+        if not F0:
+            F0 = self.F0
+
+        if not E0:
+            E0 = self.E0
+
+        if model in Sneddon:
+            SneddonFactor = np.tan(alpha)*2/np.pi*(1 - nu**2)
+            E = (self.conservative() * np.sqrt(E0 / F0)
+                 / (2 * np.sqrt(SneddonFactor)))
+        elif model in Hertz:
+            HertzFactor = 3./4 * R / (1 - nu**2)**2
+            E = (self.conservative() * (E0 / F0)**(1/3.)
+                 / (2 * np.sqrt(HertzFactor)))
 
         return E
 
@@ -842,14 +864,41 @@ class DynamicYoung(DynamicViscoelastic):
         Sneddon = ['Sneddon', 'sneddon', 'S', 's']
         Hertz = ['Hertz', 'hertz', 'H', 'h']
         omega0 = self.omega0
+
         if not F0:
             F0 = self.F0
+
         if model in Sneddon:
             SneddonFactor = np.tan(alpha)*8/np.pi*(1 - nu**2)
             E = (self.dissipative() * omega0/np.sqrt(F0))**2/SneddonFactor
         elif model in Hertz:
             E = (np.sqrt(0.5 * self.dissipative() * omega0 *
                             (4./(3*F0))**(1./3))**3 / np.sqrt(R))
+
+        return E
+
+    def MyLoss(self, model='Sneddon',
+               F0=None, alpha=15*np.pi/180, nu=.5, R=10e-9, E0=None,
+               omega0=1.):
+        Sneddon = ['Sneddon', 'sneddon', 'S', 's']
+        Hertz = ['Hertz', 'hertz', 'H', 'h']
+
+        omega0 = self.omega0
+
+        if not F0:
+            F0 = self.F0
+
+        if not E0:
+            E0 = self.E0
+
+        if model in Sneddon:
+            SneddonFactor = np.tan(alpha)*2/np.pi*(1 - nu**2)
+            E = (self.dissipative()  * omega0 * np.sqrt(E0 / F0)
+                 / (2 * np.sqrt(SneddonFactor)))
+        elif model in Hertz:
+            HertzFactor = 3./4 * R / (1 - nu**2)**2
+            E = (self.dissipative() * omega0 * (E0 / F0)**(1/3.)
+                 / (2 * np.sqrt(HertzFactor)))
 
         return E
 
@@ -884,6 +933,7 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         para = np.load(parapath).item()
         self.AddHeaderEntries(para[basename])
         invOLS = self["AmpInvOLS"]
+        E0 = self["E0"]
         if self.eigenmode == 1:
             print("first eigenmode")
             A = self.getData("Amplitude1Retrace")
@@ -920,16 +970,9 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         DynamicYoung.__init__(self, A, phi,
                                 A_free, phi_free,
                                 A_near, phi_near,
-                                Q, k, omega0)
+                                Q, k, omega0, E0)
 
-    def tau(self, model='h'):
-        es = gaussian_filter(self.Storage(model=model), 3)
-        el = gaussian_filter(self.Loss(model=model), 3)
-        gx, gy = np.gradient(es, el)
-        g = np.hypot(gx, gy)
-        return g / self.omega0
-
-    def True_tau(self, model='h', blurs=1, blurl=3):
+    def tau(self, model='h', blurs=1, blurl=3):
         es = gaussian_filter(self.Storage(model=model), blurs)
         el = gaussian_filter(self.Loss(model=model), blurl)
         dx = 20./256
@@ -940,8 +983,19 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         g = np.hypot(gx/glx, gy/gly)
         return g / self.omega0
 
+    def True_tau(self, model='h', blurs=1, blurl=3):
+        es = gaussian_filter(self.MyStorage(model=model), blurs)
+        el = gaussian_filter(self.MyLoss(model=model), blurl)
+        dx = 20./256
+        glx, gly = np.gradient(el, dx)
+        glx = gaussian_filter(glx, 1)
+        gly = gaussian_filter(gly, 1)
+        gx, gy = np.gradient(es, dx)
+        g = np.hypot(gx/glx, gy/gly)
+        return g / self.omega0
+
     def km(self, model='h', blurs=1, blurl=3):
-        tau = self.tau()
+        tau = self.tau(model=model)
         omega = self.omega0
         ot = tau*omega
         el = self.Loss(model=model)
@@ -951,7 +1005,7 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         tau = self.True_tau(model=model)
         omega = self.omega0
         ot = tau*omega
-        el = self.Loss(model=model)
+        el = self.MyLoss(model=model)
         return el * (1 + ot**2) / ot
 
     def kinf(self, model='h', blurs=1, blurl=3):
@@ -966,8 +1020,8 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         tau = self.True_tau(model=model)
         omega = self.omega0
         ot = tau*omega
-        el = self.Loss(model=model)
-        es = self.Storage(model=model)
+        el = self.MyLoss(model=model)
+        es = self.MyStorage(model=model)
         return es - ot * el
 
 
@@ -1026,7 +1080,7 @@ class StaticYoung(ContactPoint):
     i.e.: Sphere, Cone, Punch or arbitrary exponent.
     """
 
-    def Young(self, model='h', ind=None, f=None, p0=[1e4],
+    def Young(self, model='h', ind=None, f=None, p0=[1e4, 0],
               fmin=1e-9, fmax=20e-9,
               imin=5e-9, imax=50e-9,
               R=10e-6,
@@ -1079,7 +1133,8 @@ class StaticYoung(ContactPoint):
                 xi = SlopeCorrection(alpha, beta)
             else:
                 xi = 1
-                G = 2.*np.tan(alpha)*xi/np.pi
+
+            G = 2.*np.tan(alpha)*xi/np.pi
         elif model in ['p', 'P', 'punch', 'Punch']:
             gamma = 1
             R = float(input("What's the radius of the cylinder "))
