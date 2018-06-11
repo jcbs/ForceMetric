@@ -13,7 +13,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='ForceMetric',
-    version='0.0.1',
+    version='0.0.4',
     description='AFM package for Asylum Research .ibw files',
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -21,11 +21,12 @@ setuptools.setup(
     author_email='jacob.seifert@gmx.net',
     url='https://github.com/jcbs/ForceMetric',
     packages=setuptools.find_packages(),
+    install_requires=["numpy", "h5py", "scipy", "igor", "matplotlib"],
     classifiers=(
-        "Programmin Language :: Python :: 3",
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),
-        # py_modules=['Tools', 'ContactPointDetermination'],
+    py_modules=['Tools', 'ContactPointDetermination'],
         # ext_modules=[Extension('ForceMetric', ['ForceMetric.c'])]
 )
