@@ -12,7 +12,6 @@ import multiprocessing
 import h5py
 from tqdm import tqdm
 from igor import binarywave as ibw
-import scipy.constants as cons
 from scipy import optimize as opt
 from scipy.stats import chisquare
 from scipy.interpolate import interp1d
@@ -24,13 +23,13 @@ from matplotlib import pyplot as plt
 from matplotlib import cm
 from matplotlib.cbook import get_sample_data
 from matplotlib._png import read_png
-from mpl_toolkits.mplot3d import axes3d
 from ContactPointDetermination import GradientCP, MultiplyCP, RovCP, FitCP, GofCP
-from mayavi import mlab
-from mayavi.api import Engine
-from mayavi.sources.api import ArraySource
-from mayavi.filters.api import WarpScalar, PolyDataNormals
-from mayavi.modules.api import Surface
+# from mpl_toolkits.mplot3d import axes3d
+# from mayavi import mlab
+# from mayavi.api import Engine
+# from mayavi.sources.api import ArraySource
+# from mayavi.filters.api import WarpScalar, PolyDataNormals
+# from mayavi.modules.api import Surface
 
 
 def GetLine(data, p0, p1, num=1000):
