@@ -13,7 +13,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='ForceMetric',
-    version='0.0.4',
+    version='0.0.5',
     description='AFM package for Asylum Research .ibw files',
     long_description=long_description,
     long_description_content_type="text/markdown",
