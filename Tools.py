@@ -4,6 +4,7 @@ import numpy as np
 import itertools
 from PIL import Image, ImageDraw
 import scipy.ndimage as ndi
+from matplotlib import pyplot as plt
 from scipy.optimize import leastsq
 from scipy.interpolate import interp2d
 from scipy.integrate import odeint
@@ -19,18 +20,197 @@ from numpy import empty, roll
 from collections import defaultdict
 
 
+def RadarPlot(data, labels, category, idx=0):
+    grp = data.groupby(category)
+    stats = grp.mean().loc[idx, labels].values
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
+    stats = np.concatenate((stats, [stats[0]]))
+    angles = np.concatenate((angles, [angles[0]]))
+    fig = plt.figure()
+    ax = fig.add_subplot(111, polar=True)
+    ax.plot(angles, stats, 'o-', linewidth=2)
+    ax.fill(angles, stats, alpha=0.25)
+    ax.set_thetagrids(angles * 180 / np.pi, labels)
+    return fig, ax
+
+
+def AddRadarPlot(data, labels, category, idx, ax):
+    grp = data.groupby(category)
+    stats = grp.mean().loc[idx, labels].values
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
+    stats = np.concatenate((stats, [stats[0]]))
+    angles = np.concatenate((angles, [angles[0]]))
+    ax.plot(angles, stats, 'o-', linewidth=2)
+    ax.fill(angles, stats, alpha=0.25)
+
+
+def center_image_at(img, p0):
+    cnx, cny = p0
+    Ly, Lx = img.shape
+    c0x = int(Lx / 2)
+    c0y = int(Ly / 2)
+    shiftx = cnx - c0x
+    shifty = cny - c0y
+    newcx = 2 * c0x
+    newcy = 2 * c0x
+    newLx = newcx + Lx
+    newLy = newcy + Lx
+    newcx -= shiftx
+    newcy -= shifty
+    sx = slice(int(newcx - Lx/2), int(newcx + Lx/2))
+    sy = slice(int(newcy - Ly/2), int(newcy + Ly/2))
+    newImg = np.full([newLy, newLx], np.nan)
+    newImg[sy, sx] = img
+    return newImg
+
+
+def dummy_img(shape, periods=3):
+    dimy, dimx = shape
+    phix = np.linspace(0, periods * 2 * np.pi, dimx)
+    phiy = np.linspace(0, periods * dimy / dimx * 2 * np.pi, dimy)
+    Y, X = np.meshgrid(phix, phiy)
+    img = np.sin(X) + np.cos(Y)
+    return img
+
+
+def toggle(switch):
+    if switch:
+        switch = False
+    else:
+        switch = True
+    return switch
+
+
+def concat_images(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
+                  ontop=True):
+    """
+    Combines two color image ndarrays side-by-side.
+    """
+    if direction == 'horizontal':
+        max_dim = np.maximum.reduce([imga.shape, imgb.shape])
+
+        center_a = np.array(np.divide(imga.shape, 2), dtype=int)
+        center_b = np.array(np.divide(imgb.shape, 2), dtype=int)
+        offset = (abs(yoffset), abs(xoffset))
+
+        new_offset = np.subtract(center_a, np.add(center_b, offset))
+
+        if (max_dim == imgb.shape).all():
+            tmp = np.copy(imgb)
+            imgb = np.copy(imga)
+            imga = np.copy(tmp)
+            ontop = toggle(ontop)
+            xoffset *= -1
+            yoffset *= -1
+
+        # elif not (max_dim == imga.shape).all():
+            # for i, m in enumerate(max_dim):
+                # if m not in imga.shape:
+                    # new_offset[i] = center_a[i] - (center_b[i] + offset[i])
+                # else:
+                    # new_offset[i] = center_a[i] + offset[i] - center_b[i]
+
+        new_offset[new_offset > 0] = 0
+        center_new = np.array(np.divide(max_dim, 2), dtype=int)
+        new_img = np.full(np.add(max_dim, np.abs(new_offset)), np.nan)
+
+        Sa0 = slice(int(center_new[0] - imga.shape[0]/2 + 0.5),
+                    int(center_new[0] + imga.shape[0]/2 + 0.5))
+        Sa1 = slice(int(center_new[1] - imga.shape[1]/2 + 0.5),
+                    int(center_new[1] + imga.shape[1]/2 + 0.5))
+        Sb0 = slice(int(center_new[0] + abs(yoffset) - imgb.shape[0]/2 + 0.5),
+                    int(center_new[0] + abs(yoffset) + imgb.shape[0]/2 + 0.5))
+        Sb1 = slice(int(center_new[1] + abs(xoffset) - imgb.shape[1]/2 + 0.5),
+                    int(center_new[1] + abs(xoffset) + imgb.shape[1]/2 + 0.5))
+
+        xdir = np.sign(xoffset)
+        ydir = np.sign(yoffset)
+
+        if ydir == 0:
+            ydir = 1
+        if xdir == 0:
+            xdir = 1
+
+        imga = imga[::ydir, ::xdir]
+        imgb = imgb[::ydir, ::xdir]
+
+        if ontop:
+            new_img[Sa0, Sa1] = imga
+            new_img[Sb0, Sb1] = imgb
+        else:
+            new_img[Sb0, Sb1] = imgb
+            new_img[Sa0, Sa1] = imga
+
+        return new_img[::ydir, ::xdir]
+
+
+class ImageShift(object):
+
+    def __init__(self, img, xoff=0, yoff=0):
+        self.image = img
+        self.xoffset = xoff
+        self.yoffset = yoff
+
+    def xshift(self, xshift):
+        self.xoffset += xshift
+
+    def yshift(self, yshift):
+        self.yoffset += yshift
+
+    def xyshift(self, xshift, yshift):
+        self.xoffset += xshift
+        self.yoffset += yshift
+
+    def apply_shift(self):
+        size = np.add(self.image.shape, (abs(2 * self.yoffset), abs(2 * self.xoffset)))
+        dimy, dimx = self.image.shape
+        new = np.full(size, np.nan)
+        cy, cx = np.add(np.divide(new.shape, (2, 2)), (self.yoffset,
+                                                       self.xoffset))
+        cy = int(cy)
+        cx = int(cx)
+        new[cy - int(dimy / 2):cy + int(dimy / 2), cx - int(dimx / 2):cx +
+            int(dimx / 2)] = self.image
+        self.image = 1 * new
+
+    def get_original(self):
+        mask = np.isnan(self.image)
+        self.image = self.image[~mask]
+
+
+class Stitching(object):
+
+    def __init__(self, images):
+        self.images = images
+
+    def AddImage(self, image):
+        self.images.append(image)
+
+    def FullImage(self):
+        for i, img in enumerate(self.images):
+            if i == 0:
+                old = 1 * img
+            else:
+                new = concat_images(old, img, xoffset=0, yoffset=0)
+                old = 1 * new
+
+        self.total = 1 * new
+        return self.total
 
 
 class reduced_qty:
     """
-        This class gives a reduced quantity like the reduced mass m* = m1*m2/(m1 + m2) in a two body problem or
+        This class gives a reduced quantity like the reduced mass m* =
+        m1*m2/(m1 + m2) in a two body problem or
         k* = k1*k2/(k1 + k2) for parallel springs.
         This means dim(p) = 2 and
 
             p* = p[0]*p[1]/(p[0] + p[1])
 
-        seek is the parameter for which quantity we are looking for. If seek='r' the output will be the reduce quantity
-        if seek=1 the output will the first quantity assuming p[1] is the reduced quantity
+        seek is the parameter for which quantity we are looking for. If
+        seek='r' the output will be the reduce quantity
+        if seek=1 the output will the first quantity assuming p[1] is the
+        reduced quantity
     """
     def __init__(self, p, seek='r'):
         if seek=='r':
@@ -401,7 +581,7 @@ def LineRoi(pts, width=20, shape=(256, 256)):
     return mask
 
 
-def velocity(length, time, method='slope', sort_length=False):
+def velocity(length, time, method='slope', sort_length=False, deg=2):
     """calculates velocity for length intervals"""
     delta_t = np.roll(time, -1) - time
 
@@ -412,6 +592,19 @@ def velocity(length, time, method='slope', sort_length=False):
         vel = (np.roll(length, -1) - length) / delta_t
     elif method == 'gradient':
         vel = np.gradient(length, time)
+    elif method == 'analytical':
+        mask = np.isnan(length)
+        # length = length[~mask]*1
+        # time = time[~mask]*1
+        para = np.polyfit(time[~mask], length[~mask], deg)
+        vel = np.polyval(para[:-1] * np.arange(1, deg+1)[::-1], time)
+    elif method == 'normalized':
+        mask = np.isnan(length)
+        # length = length[~mask]*1
+        # time = time[~mask]*1
+        para = np.polyfit(time[~mask], np.log(length[~mask]), deg)
+        vel = (np.polyval(para[:-1] * np.arange(1, deg+1)[::-1], time) /
+               np.polyval(para, time))
     elif method == 'correlated gradient':
         acc = (np.correlate(length, length, mode='full')[:len(time)])
         vel = np.gradient(np.gradient(acc, time))

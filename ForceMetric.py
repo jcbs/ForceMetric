@@ -165,7 +165,7 @@ def NeoHookeanBead(delta, p, R=10e-9):
     return force
 
 
-def eccentricity(alpha,beta):
+def eccentricity(alpha, beta):
     """
     Calculates eccentricity of an ellipse
 
@@ -324,6 +324,17 @@ def nearestPoint(x, x0):
     return idx
 
 
+def IdentifyScanMode(path):
+    wave = Wave(path)
+
+    if 'ForceDisplay0' in wave.keys():
+        mode = 'ForceCurve'
+    else:
+        mode = 'Imaging'
+
+    return mode
+
+
 class Header(dict):
     """
     Class which accociates the header as a dictionary of itself
@@ -335,6 +346,17 @@ class Header(dict):
     def AddHeaderEntries(self, entries):
         for key in entries:
             self[key] = entries[key]
+
+    def SearchHeader(self, string):
+        Hits = []
+        for key, value in self.items():
+            if string in key:
+                Hits.append(key)
+
+        if len(Hits):
+            return Hits
+        else:
+            print("%s is not a parameter in this header" % string)
 
 
 class Wave(Header):
@@ -366,7 +388,7 @@ class Wave(Header):
             for h in H:
                 try:
                     dec = h.decode("utf-8").split(":")
-                    header[dec[0]]= float(dec[1])
+                    header[dec[0]] = float(dec[1])
                 except:
                     try:
                         dec = h.decode("utf-8").split(":")
@@ -374,7 +396,6 @@ class Wave(Header):
                     except:
                         if verbose:
                             print("Can't decode ", h)
-
 
             self.data = 1*np.rollaxis(self.wave.get('wData'), -1)
             label = self.wave.get('labels')
@@ -391,7 +412,6 @@ class Wave(Header):
             header = dict(data.attrs)
             self.labels = list(data.keys())
             self.data = np.array([data.get(l) for l in self.labels])
-
 
         Header.__init__(self, header)
 
@@ -547,12 +567,10 @@ class ParameterDict(object):
         already exists, the dictionary gets changed"""
         self.parameters[fnb] = dictionary
 
-
     def Write(self, path=None):
         if path:
             self.path = path
             np.save(self.path, self.parameters)
-
 
 
 class AFMScan(Wave):
@@ -707,10 +725,10 @@ class DynamicViscoelastic(object):
     omega0 : float
         resonance/drive frequency of the cantilever :math:`2 \pi f_0 = \omega_0`
     """
-    def __init__ (self, amplitude=False, phase=False,
-                  free_amplitude=1.e-9, free_phase=np.pi/2.,
-                  near_amplitude=1.e-9, near_phase=np.pi/2.,
-                  Q=1., k=1., omega0=1.):
+    def __init__(self, amplitude=False, phase=False,
+                 free_amplitude=1.e-9, free_phase=np.pi/2.,
+                 near_amplitude=1.e-9, near_phase=np.pi/2.,
+                 Q=1., k=1., omega0=1.):
         self.amplitude = amplitude
         self.free_amplitude = free_amplitude
         self.near_amplitude = near_amplitude
@@ -767,15 +785,14 @@ class DynamicViscoelastic(object):
         see DynamicYoung
         """
         Q = self.Q
-        C1 = self.k * self.free_amplitude / Q * np.sqrt(1 - 1./ 4 / Q**2)
+        C1 = self.k * self.free_amplitude / Q * np.sqrt(1 - 1. / 4 / Q**2)
         C2 = 1./self.near_amplitude
         phi = self.phase
         phi_n = self.near_phase
         A = self.amplitude
-        A_n = self.near_amplitude
         omega0 = self.omega0
         diss = C1 * (np.sin(phi) / A - C2 * np.sin(phi_n)) / omega0
-        diss[diss<0] = np.nan
+        diss[diss < 0] = np.nan
         return diss
 
 
@@ -811,14 +828,16 @@ class DynamicYoung(DynamicViscoelastic):
     omega0 : float
         resonance/drive frequency of the cantilever :math:`2 \pi f_0 = \omega_0`
     """
-    def __init__ (self, amplitude=False, phase=False,
-                  free_amplitude=1.e-9, free_phase=np.pi/2.,
-                  near_amplitude=1.e-9, near_phase=np.pi/2.,
-                  Q=1., k=1., omega0=1., E0=3e7):
+    def __init__(self, amplitude=False, phase=False,
+                 free_amplitude=1.e-9, free_phase=np.pi/2.,
+                 near_amplitude=1.e-9, near_phase=np.pi/2.,
+                 Q=1., k=1., omega0=1., E0=3e7):
         DynamicViscoelastic.__init__(self, amplitude=amplitude, phase=phase,
-                                     free_amplitude=free_amplitude, free_phase=free_phase,
-                                     near_amplitude=near_amplitude, near_phase=near_phase,
-                                     Q=Q, k=k, omega0=omega0)
+                                     free_amplitude=free_amplitude,
+                                     free_phase=free_phase,
+                                     near_amplitude=near_amplitude,
+                                     near_phase=near_phase, Q=Q, k=k,
+                                     omega0=omega0)
         self.E0 = E0
 
     def Storage(self, model='Sneddon',
@@ -836,13 +855,13 @@ class DynamicYoung(DynamicViscoelastic):
             SneddonFactor = np.tan(alpha)*8/np.pi*(1 - nu**2)
             E = (self.conservative()/np.sqrt(F0))**2/SneddonFactor
         elif model in Hertz:
-            E = (np.sqrt(0.5 * self.conservative() *
-                            (4./(3*F0))**(1./3))**3 / np.sqrt(R))
+            E = (np.sqrt(0.5 * self.conservative() * (4./(3*F0))**(1./3))**3 /
+                 np.sqrt(R))
 
         return E
 
-    def MyStorage(self, model='Sneddon',
-                F0=None, alpha=15*np.pi/180, nu=.5, R=10e-9, E0=None):
+    def MyStorage(self, model='Sneddon', F0=None, alpha=15*np.pi/180, nu=.5,
+                  R=10e-9, E0=None):
         Sneddon = ['Sneddon', 'sneddon', 'S', 's']
         Hertz = ['Hertz', 'hertz', 'H', 'h']
         if not F0:
@@ -876,7 +895,7 @@ class DynamicYoung(DynamicViscoelastic):
             E = (self.dissipative() * omega0/np.sqrt(F0))**2/SneddonFactor
         elif model in Hertz:
             E = (np.sqrt(0.5 * self.dissipative() * omega0 *
-                            (4./(3*F0))**(1./3))**3 / np.sqrt(R))
+                         (4./(3*F0))**(1./3))**3 / np.sqrt(R))
 
         return E
 
@@ -932,7 +951,6 @@ class DynamicYoung(DynamicViscoelastic):
 
         return delta
 
-
     def ComplexModulus(self, model='Hertz',
                        F0=1., alpha=15*np.pi/180, nu=.5, R=10e-9):
         E_s = self.Storage(model=model,
@@ -956,7 +974,7 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
 
     def load(self, path):
         """This loads the file and all parameters"""
-        print("Load file: %s" %path)
+        print("Load file: %s" % path)
         AFMScan.__init__(self, path)
         directory = os.path.dirname(path)
         basename = os.path.basename(path).split('.')[0]
@@ -967,7 +985,7 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         E0 = self["E0"]
         if self.eigenmode == 1:
             print("first eigenmode")
-            try: 
+            try:
                 A = self.getData("Amplitude1Retrace")
             except:
                 A = self.getData("AmplitudeRetrace")
@@ -1100,7 +1118,8 @@ class ContactPoint(object):
     of force values.
     """
 
-    def getCP(self, ind=None, f=None, method='fiv', model='h', stds=4):
+    def getCP(self, ind=None, f=None, method='fiv', model='h', stds=4,
+              surface_effect=None, surface_range=0.1):
         """
         Parameters
         ----------
@@ -1116,6 +1135,9 @@ class ContactPoint(object):
             Fit: 'fit'\n
         model: str
             indentation model, only needed for gof method.
+        surface_effect: int
+            polynomial correction for surface effect such as hydrodynamic
+            coupling between cantilever and surface.
         """
         # cdef int idx = 0
 
@@ -1125,16 +1147,34 @@ class ContactPoint(object):
         if f is None:
             f = 1*self.force.Trace()
 
-        if method == 'fit':
-            idx = FitCP(ind, f, stds)
-        elif method == 'rov':
-            idx = RovCP(f)
-        elif method == 'grad':
-            idx = GradientCP(f, ind)
-        elif method == 'fiv':
-            idx = MultiplyCP(f, ind)
-        elif method == 'gof':
-            idx = GofCP(f, ind, model)
+        if surface_effect:
+            for t in range(2):
+                if t == 1:
+                    N = int(surface_range * len(ind))
+                    p = np.polyfit(ind[idx:idx + N], f[idx:idx + N],
+                                   surface_effect)
+                    f[idx:] -= np.polyval(p, ind[idx:])
+                if method == 'fit':
+                    idx = FitCP(ind, f, stds)
+                elif method == 'rov':
+                    idx = RovCP(f)
+                elif method == 'grad':
+                    idx = GradientCP(f, ind)
+                elif method == 'fiv':
+                    idx = MultiplyCP(f, ind)
+                elif method == 'gof':
+                    idx = GofCP(f, ind, model)
+        else:
+            if method == 'fit':
+                idx = FitCP(ind, f, stds)
+            elif method == 'rov':
+                idx = RovCP(f)
+            elif method == 'grad':
+                idx = GradientCP(f, ind)
+            elif method == 'fiv':
+                idx = MultiplyCP(f, ind)
+            elif method == 'gof':
+                idx = GofCP(f, ind, model)
 
         self.contactidx = idx
         return self.contactidx
@@ -1272,13 +1312,16 @@ class ForceCurve(StaticYoung, Wave):
 
     def correct(self, stds=4, method='fiv',
                 fitrange=0.6, cix=None,
-                fmin=25e-9, fmax=100e-9):
+                fmin=25e-9, fmax=100e-9,
+               surface_effect=None, surface_range=0.1):
         """Determins the contact point with your favourite method"""
         # cdef int contactidx
         if cix:
             contactidx=cix
         else:
-            contactidx = self.getCP(stds=stds, method=method)
+            contactidx = self.getCP(stds=stds, method=method,
+                                    surface_effect=surface_effect,
+                                    surface_range=surface_range)
         self.zsnr.data -= self.zsnr.Trace()[contactidx]
         self.deflection.data -= self.deflection.Trace()[contactidx]
         if self.force.Trace()[contactidx] < self.force.Trace()[0]:
@@ -1313,7 +1356,7 @@ class ForceCurve(StaticYoung, Wave):
         """Calculates the index of the surface release of the retrace curve"""
         self.correct(method=method)
         f = self.force.Trace()*1
-        ind = self.indentation.Trace()*1
+        ind = self.indentation.Trace() * 1
         ix = self.contactidx*1
         d = self.difference(method=method)
         k = self.k
@@ -1323,6 +1366,27 @@ class ForceCurve(StaticYoung, Wave):
         self.surfaceidx = sidx
         return sidx
 
+    def get_idx_at(self, value=50e-9, qty='force'):
+        if qty in ['force', 'Force', 'f', 'F']:
+            idx = nearestPoint(self.force.Trace(), value)
+        elif qty in ['deflection', 'Deflection', 'defl', 'Defl']:
+            idx = nearestPoint(self.deflection.Trace(), value)
+        elif qty in ['deflection_V', 'Deflection_V', 'defl_V', 'Defl_V']:
+            ols = self['InvOLS']
+            idx = nearestPoint(self.deflection.Trace() / ols, value)
+        elif qty in ['indentation', 'Indentation', 'ind', 'Ind', 'delta']:
+            idx = nearestPoint(self.indentation.Trace(), value)
+        return idx
+
+    def get_ind_at(self, value=0.3, qty='defl_V'):
+        idx = self.get_idx_at(value=value, qty=qty)
+        ind = self.indentation.Trace()[idx]
+        return ind
+
+    def get_force_at(self, value=50e-9, qty='indentation'):
+        idx = self.get_idx_at(value=value, qty=qty)
+        force = self.force.Trace()[idx]
+        return force
 
     def ContactPhase(self, dist=-10e-9):
         phi = self.phase1.Trace()
@@ -1359,8 +1423,9 @@ class ForceCurve(StaticYoung, Wave):
                  self.force.Trace()/nano, c='r', label='Trace')
         ax1.plot(self.indentation.Retrace()/micro,
                  self.force.Retrace()/nano, c='b', label='Retrace')
-        plt.ylabel(r'$F$ in nN')
-        ax1.legend(loc='upper left')
+        ax1.set_xlabel(r"$\delta$ in um")
+        ax1.set_ylabel(r'$F$ in nN')
+        ax1.legend(loc='best')
         ax1.grid()
         if self.data.shape[0] >= 5:
             ax2.plot(self.indentation.Trace()/micro,
@@ -1368,20 +1433,21 @@ class ForceCurve(StaticYoung, Wave):
                      c='r', label='Trace')
             ax2.plot(self.indentation.Retrace()/micro,
                      self.phase1.Retrace(), c='b', label='Retrace')
-            plt.xlabel(r'$\delta$ in um')
-            plt.ylabel(r'$\phi$ in deg')
-            plt.legend(loc='upper left')
+            ax2.set_xlabel(r'$\delta$ in um')
+            ax2.set_ylabel(r'$\phi$ in deg')
+            ax2.legend(loc='best')
 
             ax3.plot(self.indentation.Trace()/micro,
                      self.amp1.Trace()/nano, c='r', label='Trace')
             ax3.plot(self.indentation.Retrace()/micro,
                      self.amp1.Retrace()/nano, c='b', label='Retrace')
             ax2.grid()
-            plt.xlabel(r'$\delta$ in um')
-            plt.ylabel(r'$A$ in nm')
-            plt.legend(loc='upper left')
+            ax3.set_xlabel(r'$\delta$ in um')
+            ax3.set_ylabel(r'$A$ in nm')
+            ax3.legend(loc='best')
             ax3.grid()
             plt.show()
+            return f, ax1, ax2, ax3
 
 class Multicurve(ForceCurve):
     def __init__(self, path):
