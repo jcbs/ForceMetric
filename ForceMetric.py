@@ -1185,6 +1185,48 @@ class StaticYoung(ContactPoint):
     Calculates Young's modulus for different indentation models.
     This means Hertz model for different indenters,
     i.e.: Sphere, Cone, Punch or arbitrary exponent.
+
+    Parameters
+    ----------
+    model: str
+        Chooses the contact model for the analysis. Tthe implemented models are
+        Hertz (Hertz, hertz, H, h), Sneddon (Sneddon, sneddon, S, s), Punch
+        (Punch, punch, P, p), Neohookean (neohookean, neo, NH, nh). The strings
+        in the parantheses are the recognized forms for the repsective models.
+    ind: 1d array
+        The array of the indentation value. If None the indentation of the
+        ForceCurve is choosen, providing this class is used
+    f: 1d array
+        The array of the force value. If None the force of the
+        ForceCurve is choosen, providing this class is used
+    p0: tuple
+        Initial fitting parameters. p0[0] is the slope and p0[1] the force
+        offset
+    fmin: scalar
+        minimum value of fitting range in case constant='force'
+    fmax: scalar
+        maximum value of fitting range in case constant='force'
+    imin: scalar
+        minimum value of fitting range in case constant='indentation'
+    imax: scalar
+        maximum value of fitting range in case constant='indentation'
+    R: scalar
+        sphere radius in case the contact model is Hertz or Neohookean and
+        cylinder radius in case the contact model is Punch
+    alpha: scalar
+        half opening angle of the cone in case the contact model is Sneddon
+    beta: scalar
+        angle of the slope in case the contact model is Sneddon and the
+        indented surface was sloped.
+    constant: str
+        determines whether the fitting range is chosen for the indentation or
+        the force.
+
+    Returns
+    -------
+    E: scalar
+        Effective Young's modulus, i.e. it must be multiplied by 1 - nu**2,
+        with Poisson's ratio nu
     """
 
     def Young(self, model='h', ind=None, f=None, p0=[1e4, 0],
@@ -1353,7 +1395,18 @@ class ForceCurve(StaticYoung, Wave):
         return np.array(d)
 
     def surface_idx(self, method='fiv'):
-        """Calculates the index of the surface release of the retrace curve"""
+        """
+        Calculates the index of the surface release of the retrace curve
+
+        Parameters
+        ----------
+        method: string
+            Force-Indentation variation: 'fiv'\n
+            Ratio-of-Variances: 'rov'\n
+            Gradient: 'grad'\n
+            Godness-of-Fit: 'gof'\n
+            Fit: 'fit'\n
+        """
         self.correct(method=method)
         f = self.force.Trace()*1
         ind = self.indentation.Trace() * 1
@@ -1367,6 +1420,22 @@ class ForceCurve(StaticYoung, Wave):
         return sidx
 
     def get_idx_at(self, value=50e-9, qty='force'):
+        """
+        Calculates the index at a certain value for a given quantity
+
+        Parameters
+        ----------
+        value: scalar
+            value for which the index should be found
+        qty: string
+            quantity for which the value is given, e.g. force, indentation,
+            deflection
+
+        Returns
+        -------
+        idx: int
+            index closest to value
+        """
         if qty in ['force', 'Force', 'f', 'F']:
             idx = nearestPoint(self.force.Trace(), value)
         elif qty in ['deflection', 'Deflection', 'defl', 'Defl']:

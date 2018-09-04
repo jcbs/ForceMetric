@@ -1,0 +1,45 @@
+u\begin{tikzpicture}[scale=1]
+
+% \draw[gray, opacity=0.3] (0, 4) grid ++ (21.0, -29.7);
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north, align=center, text width=11cm] (n0) at (10, 3.5) {Cantilever calibration and tuning of resonance frequencies.\\ 
+\begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, adjusted title={Initial conditions (far):}, lower separated=false, sidebyside]  $A_0 \gg A_1 > A_2$ \tcblower$\phi_1 =  \phi_2 = \SI{90}{\degree} $ \end{tcolorbox}};
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north, text width=11cm, align=center] (n1) at (10, 0) 
+{Measurement of cantilever observables $A_0$, $A_1$, $\phi_1$ and if needed higher eigenmodes, e.g. $A_2$ and $\phi_2$.\\
+\begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10,adjusted title={Assumptions:}, lower separated=false]  $A_0 > A_1 > A_2$ \tcblower Repulsive regime, i.e. $\phi_1 <\SI{90}{\degree}, \phi_2 < \SI{90}{\degree} $ \end{tcolorbox}};
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north, text width=13cm, align=center] (n2) at (10, -5) 
+{Force volume curve to obtain observables at far and near distance to surface and the contact model, here: Sneddon.\\
+\begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10,adjusted title={Assumptions:}, lower separated=false]  Far means $\approx \SI{2}{\um}$ above the surface $\rightarrow A_0^{\text{far}}$,  $A_1^{\text{far}}$, $A_2^{\text{far}}$,  $\phi_1^{\text{far}}$, $\phi_2^{\text{far}}$
+\tcblower 
+Near means $\approx \SI{10}{\nm}$ above the surface $\rightarrow$ $A_1^{\text{near}}$, $A_2^{\text{near}}$,  $\phi_1^{\text{near}}$, $\phi_2^{\text{near}}$
+\end{tcolorbox}};
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north west, text width=8cm, align=center] (n3) at (0.5, -10) 
+{Calculate $E'_{1D}$ and $E''_{1D}$ from Eqs. (1) and (2)\\
+};
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north west, text width=7cm, align=center] (n4) at (10, -10) 
+{Calculate $E'_{3D}$ and $E''_{3D}$ from Eq. (S38)\\
+};
+
+\node[anchor=north, text width=12cm, align=center, inner sep=0pt, outer sep=0pt] (n5) at (10, -11.5) 
+{
+\begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10,adjusted title={Data interpretation:}, lower separated=false]  Choice of viscoelastic model, e.g. KV, MW, SLS, generalised MW 
+\tcblower 
+Here: from visualisation of $E'_{3D}$ and $E''_{3D}$ the SLS was obtained (Fig. 2).
+\end{tcolorbox}
+};
+
+
+\draw[-latex, thick] (n0.south) -- (n1.north);
+\draw[-latex, thick] (n1.south) -- (n2.north);
+\draw[-latex, thick] (n1.west) -| (n3.170);
+\draw[-latex, thick] (n2.211) -| (n3.9);
+\draw[-latex, thick] (n3.east) -- (n4.west);
+\draw[-latex, thick] (n2.329) -- (n4.109) node[midway, right] {contact model};
+\draw[-latex, thick] (n4.190) -- (n5.52);
+
+
+\end{tikzpicture}

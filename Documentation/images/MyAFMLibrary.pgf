@@ -1,0 +1,194 @@
+\begin{tikzpicture}[scale=1, every node/.style={inner sep=0pt, outer sep=0pt}]
+
+% \draw[gray, opacity=0.3] (0,0) grid ++ (29.7, -21.0);
+
+\node[rectangle, draw=black, fill=white, rounded corners, anchor=north, align=center, text width=8cm, inner sep=5pt] (n1) at (3, 0) {Raw data (.ibw file)};
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% \node[rectangle, draw=black, fill=white, rounded corners, anchor=north west, align=left, text width=15cm] (n2) at (3, -2) {
+% \begin{large}My Library:\end{large}\\ 
+% };
+
+%%%%%%%%%%%%%%%% Data Structure %%%%%%%%%%%%%%%%%%%%%%%%
+
+\node[anchor=north, align=left, text width=8cm] (n2) at (3, -2) {
+\begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=7cm, adjusted title={Header (type: dictionary)}, lower separated=false]  
+Defines a structure for the meta data.
+\tcbsubtitle{Functions:}
+AddHeaderEntries(entries)
+ \end{tcolorbox}};
+
+\node[anchor=north, align=left, text width=7cm] (n3) at (3, -6) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6cm, adjusted title={Wave (dependencies: Header)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item getParam(key)
+\item getData(key)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw[-latex, thick] (n2.south) -- (n3.north);
+
+\draw ($(n2.north west) + (-5pt, 20pt)$) coordinate (r1) rectangle ($(n3.south east) +(25pt, -5pt)$) node[pos=1] (A1) {} node[pos=1,  above=4.66cm] (A2) {} node[pos=0,  right=4.15cm] (A3) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r1) + (-5pt, -10pt)$) {Data structure};
+\draw[-latex, thick] (n1.south) -- (A3);
+
+%%%%%%%%%%%%%%%% AFM scan structure %%%%%%%%%%%%%%%%%%%%%%%%%
+
+\node[anchor=north west, align=left, text width=7cm] (n4) at (8., -2) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6cm, adjusted title={AFMScan (dependencies: Wave)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item PlaneSubtraction(data, direction, xdim, ydim)
+\item Display(data, title, zlabel, cmap, save)
+\item ProjectionOnHeight(data, cmap, zlabel, theta, phi, sub\_plane, trace, save)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw ($(n4.north west) + (-5pt, 20pt)$) coordinate (r2) rectangle ($(n4.south east) +(5pt, -5pt)$) node[pos=0, below=4cm] (B1) {}  node[pos=1, above=4cm] (B2) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r2) + (-5pt, -10pt)$) {Data structure for AFM scans};
+
+\draw[-latex, thick] (A2) -- (B1);
+
+%%%%%%%%%%%%%Force Distance Data structure %%%%%%%%%%%%%%%%%%%%%%
+
+\begin{scope}[yshift=-0.5cm]
+\node[anchor=north, align=left, text width=6cm] (n5) at (3, -11) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=5cm, adjusted title={FDIndices (type: Object)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+None
+\end{tcolorbox}
+};
+
+
+\node[anchor=north, align=left, text width=7cm] (n6) at (3, -14.05) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6cm, adjusted title={FDData (dependencies: FDIndices)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item Trace()
+\item Retrace()
+\item Dwell()
+\item Data()
+\end{itemize}
+\end{tcolorbox}
+};
+\end{scope}
+
+\draw[-latex, thick] (n5.south) -- (n6.north);
+
+\draw ($(n5.north west) + (-20pt, 20pt)$) coordinate (r2) rectangle ($(n6.south east) +(8pt, -5pt)$) node[pos=1,  above=5.25cm] (C1) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r2) + (-5pt, -10pt)$) {Structure for force volume measurements};
+
+% \draw[-latex, thick] (A1) -- (C1);
+
+%%%%%%%%%%%%%%% Structure for Dynamic Mechanical Data%%%%%%%%%%%%%%%%
+
+\begin{scope}[xshift=-2cm, yshift=1cm]
+\node[anchor=north, align=left, text width=7cm] (n7) at (32.5, -.25) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6cm, adjusted title={DynamicViscoelastic (type: Object)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item conservative()
+\item dissipative()
+\end{itemize}
+\end{tcolorbox}
+};
+
+\node[anchor=north, align=left, text width=9cm] (n8) at (32.5, -5) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=8cm, adjusted title={DynamicYoung (dependencies: DynamicViscoelastic)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item Storage(model, $F_0$, $\alpha$, $\nu$, R)
+\item MyStorage(model, $F_0$, $\alpha$, $\nu$, R, $E_0$)
+\item Loss(model, $F_0$, $\alpha$, $\nu$, R, $\omega_0$)
+\item MyLoss(model, $F_0$, $\alpha$, $\nu$, R, $E_0$, $\omega_0$)
+\item Delta(model, $F_0$, $\alpha$, $\nu$, R)
+\item ComplexModulus(model, $F_0$, $\alpha$, $\nu$, R, $E_0$)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw[-latex, thick] (n7.south) -- (n8.north);
+
+\draw ($(n7.north west) + (-36pt, 20pt)$) coordinate (r6) rectangle ($(n8.south east) +(8pt, -5pt)$) node[pos=0,  below=6.09cm] (G1) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r6) + (-5pt, -10pt)$) {Structure for dynamic mechanics};
+\end{scope}
+
+%%%%%%%%%%%%%%%%%%%%%% Dynamic Mechanical AFM Scan %%%%%%%%%%%%%%%%%%%%%%%
+
+\node[anchor=north, align=left, text width=9cm] (n12) at (20.25, 0) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=8cm, adjusted title={DynamicMechanicAFMScan (dependencies: DynamicYoung, AFMScan)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item load(path)
+\item tau(model, blurs, blurl)
+\item True\_tau(model, model, blurs, blurl, method)
+\item km(model, blurs, blurl)
+\item True\_km(model, model, blurs, blurl, method)
+\item kinf(model, blurs, blurl)
+\item True\_kinf(model, model, blurs, blurl, method)	
+
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw ($(n12.north west) + (-5pt, 20pt)$) coordinate (r4) rectangle ($(n12.south east) +(8pt, -5pt)$) node[pos=0,  below=5.6cm] (F1) {}  node[pos=1,  above=5.6cm] (F2) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r4) + (-5pt, -10pt)$) {Structure for dynamic mechanical viscoelastic maps};
+
+\draw[-latex, thick] (G1) -- (F2);
+\draw[-latex, thick] (B2) -- (F1);
+
+%%%%%%%%%%%%%%% Structure for Static Mechanical Data%%%%%%%%%%%%%%%%
+
+\begin{scope}[xshift=-.75cm, yshift=1.5cm]
+\node[anchor=north, align=left, text width=7.5cm] (n10) at (22, -13.) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6.5cm, adjusted title={ContactPoint (type: Object)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item getCP(ind, f, method, model, std)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\node[anchor=north, align=left, text width=7.5cm] (n11) at (22, -16.5) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=6.5cm, adjusted title={StaticYoung (dependencies: ContactPoint)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item Young(model, $\delta$, $F$, $p_0$, $F_{min}$, $F_{max}$, $\delta_{min}$, $\delta_{max}$, $R$, $\alpha$, $\beta$, constant)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw ($(n10.north west) + (-5pt, 20pt)$) coordinate (r5) rectangle ($(n11.south east) +(7pt, -5pt)$) node[pos=0,  below=4.75cm] (E1) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r5) + (-5pt, -10pt)$) {Structure for static mechanics};
+\end{scope}
+
+%%%%%%%%%%%%% Force Curve %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\node[anchor=north, align=left, text width=9cm] (n9) at (12, -11.5) {
+ \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10, text width=8cm, adjusted title={ForceCurve (dependencies: Wave, StaticYoung, FDData)}, lower separated=false]  
+\tcbsubtitle{Functions:}
+\begin{itemize}
+\item load(path)
+\item correct(stds, method, fitrange, cix, $F_{min}$, $F_{max}$)
+\item difference(method)
+\item surface\_idx(method)
+\item ContactPhase(dist)
+\item ContactAmp(dist, unit)
+\item plot(XQantity, save)
+\end{itemize}
+\end{tcolorbox}
+};
+
+\draw ($(n9.north west) + (-5pt, 20pt)$) coordinate (r4) rectangle ($(n9.south east) +(8pt, -5pt)$) node[pos=0,  right=4.6cm] (D1) {} node[pos=0,  below=4.6cm] (D2) {} node[pos=1,  above=5.15cm] (D3) {};
+\node[anchor=west, fill=red!75, inner sep=5pt, outer sep=5pt] at ($ (r4) + (-5pt, -10pt)$) {Structure for force curves};
+
+\draw[-latex, thick] (A1) -- (D1);
+\draw[-latex, thick] (C1) -- (D2);
+\draw[-latex, thick] (E1) -- (D3);
+
+
+\end{tikzpicture}
