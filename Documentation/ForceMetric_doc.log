@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.8.23)  4 SEP 2018 13:50
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (TeX Live 2016) (preloaded format=pdflatex 2017.8.23)  4 SEP 2018 14:22
 entering extended mode
  \write18 enabled.
  %&-line parsing enabled.
@@ -1205,13 +1205,13 @@ and I'll forget about whatever was undefined.
 
 {/usr/local/texlive/2016/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
 [2 <./images/MyAFMLibrary.pdf>]
-<./images/ProcessingFlowChart.pdf, id=73, 478.87308pt x 537.78516pt>
+<./images/ProcessingFlowChart.pdf, id=73, 478.87308pt x 494.33682pt>
 File: ./images/ProcessingFlowChart.pdf Graphic file (type pdf)
 
 <use ./images/ProcessingFlowChart.pdf>
 Package pdftex.def Info: ./images/ProcessingFlowChart.pdf used on input line 11
 4.
-(pdftex.def)             Requested size: 284.52756pt x 319.54712pt.
+(pdftex.def)             Requested size: 284.52756pt x 293.73051pt.
 LaTeX Font Info:    Try loading font information for OMS+cmr on input line 123.
 
 
@@ -1384,7 +1384,7 @@ xmf-dist/fonts/type1/public/txfonts/t1xtt.pfb></usr/local/texlive/2016/texmf-di
 st/fonts/type1/urw/symbol/usyr.pfb></usr/local/texlive/2016/texmf-dist/fonts/ty
 pe1/urw/times/utmr8a.pfb></usr/local/texlive/2016/texmf-dist/fonts/type1/urw/ti
 mes/utmri8a.pfb>
-Output written on ForceMetric_doc.pdf (8 pages, 226441 bytes).
+Output written on ForceMetric_doc.pdf (8 pages, 226136 bytes).
 PDF statistics:
  256 PDF objects out of 1000 (max. 8388607)
  214 compressed objects within 3 object streams

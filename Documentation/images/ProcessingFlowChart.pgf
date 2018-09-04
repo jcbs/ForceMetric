@@ -17,18 +17,16 @@ Near means $\approx \SI{10}{\nm}$ above the surface $\rightarrow$ $A_1^{\text{ne
 \end{tcolorbox}};
 
 \node[rectangle, draw=black, fill=white, rounded corners, anchor=north west, text width=8cm, align=center] (n3) at (0.5, -10) 
-{Calculate $E'_{1D}$ and $E''_{1D}$ from Eqs. (1) and (2)\\
+{Calculate $E'_{1D}$ and $E''_{1D}$ from Eqs. (2)\\
 };
 
 \node[rectangle, draw=black, fill=white, rounded corners, anchor=north west, text width=7cm, align=center] (n4) at (10, -10) 
-{Calculate $E'_{3D}$ and $E''_{3D}$ from Eq. (S38)\\
+{Calculate $E'_{3D}$ and $E''_{3D}$ from Eq. (3)\\
 };
 
 \node[anchor=north, text width=12cm, align=center, inner sep=0pt, outer sep=0pt] (n5) at (10, -11.5) 
 {
 \begin{tcolorbox}[coltitle=black, colframe=blue!45, colback=blue!10,adjusted title={Data interpretation:}, lower separated=false]  Choice of viscoelastic model, e.g. KV, MW, SLS, generalised MW 
-\tcblower 
-Here: from visualisation of $E'_{3D}$ and $E''_{3D}$ the SLS was obtained (Fig. 2).
 \end{tcolorbox}
 };
 
