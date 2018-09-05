@@ -597,6 +597,15 @@ class AFMScan(Wave):
         """
         Does plane fit to AFM data and subtracts it in either x, y or x-y
         direction
+
+        Parameters
+        ----------
+        data: 2d array
+            data array which should be plane subtracted. It is also possible to
+            choose a label from the Wave class to perform this subtraction.
+        direction: str
+            the direction in which the plane fit should be performed, i.e. x,
+            y, or xy.
         """
         if data in self.labels:
             img = self.getData(data)
@@ -1480,13 +1489,17 @@ class ForceCurve(StaticYoung, Wave):
                 a_c = amp[idx]/iols
                 return a_c
 
-    def plot(self, X='indentation', save=False):
+    def plot(self, X='indentation', save=False, All=False):
         micro = 1e-6
         nano = 1e-9
+
         if self.data.shape[0] == 3:
             f, ax1 = plt.subplots(1)
         elif self.data.shape[0] >= 5:
-            f, (ax1, ax2, ax3) = plt.subplots(3, sharex=True)
+            if All:
+                f, (ax1, ax2, ax3) = plt.subplots(3, sharex=True)
+            else:
+                f, ax1 = plt.subplots(1)
 
         ax1.plot(self.indentation.Trace()/micro,
                  self.force.Trace()/nano, c='r', label='Trace')
@@ -1496,27 +1509,29 @@ class ForceCurve(StaticYoung, Wave):
         ax1.set_ylabel(r'$F$ in nN')
         ax1.legend(loc='best')
         ax1.grid()
-        if self.data.shape[0] >= 5:
-            ax2.plot(self.indentation.Trace()/micro,
-                     self.phase1.Trace(),
-                     c='r', label='Trace')
-            ax2.plot(self.indentation.Retrace()/micro,
-                     self.phase1.Retrace(), c='b', label='Retrace')
-            ax2.set_xlabel(r'$\delta$ in um')
-            ax2.set_ylabel(r'$\phi$ in deg')
-            ax2.legend(loc='best')
 
-            ax3.plot(self.indentation.Trace()/micro,
-                     self.amp1.Trace()/nano, c='r', label='Trace')
-            ax3.plot(self.indentation.Retrace()/micro,
-                     self.amp1.Retrace()/nano, c='b', label='Retrace')
-            ax2.grid()
-            ax3.set_xlabel(r'$\delta$ in um')
-            ax3.set_ylabel(r'$A$ in nm')
-            ax3.legend(loc='best')
-            ax3.grid()
-            plt.show()
-            return f, ax1, ax2, ax3
+        if self.data.shape[0] >= 5:
+            if All:
+                ax2.plot(self.indentation.Trace()/micro,
+                         self.phase1.Trace(),
+                         c='r', label='Trace')
+                ax2.plot(self.indentation.Retrace()/micro,
+                         self.phase1.Retrace(), c='b', label='Retrace')
+                ax2.set_xlabel(r'$\delta$ in um')
+                ax2.set_ylabel(r'$\phi$ in deg')
+                ax2.legend(loc='best')
+
+                ax3.plot(self.indentation.Trace()/micro,
+                         self.amp1.Trace()/nano, c='r', label='Trace')
+                ax3.plot(self.indentation.Retrace()/micro,
+                         self.amp1.Retrace()/nano, c='b', label='Retrace')
+                ax2.grid()
+                ax3.set_xlabel(r'$\delta$ in um')
+                ax3.set_ylabel(r'$A$ in nm')
+                ax3.legend(loc='best')
+                ax3.grid()
+                plt.show()
+                return f, ax1, ax2, ax3
 
 class Multicurve(ForceCurve):
     def __init__(self, path):

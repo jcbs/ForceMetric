@@ -23,4 +23,4 @@ if __name__ == "__main__":
     E = fc.Young(model='sneddon', fmin=10e-9, fmax=500e-9)
     print("E = %.2e Pa" % E)
 
-    plt.plot()
+    plt.show()
