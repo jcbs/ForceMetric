@@ -23,4 +23,8 @@ if __name__ == "__main__":
     E = fc.Young(model='sneddon', fmin=10e-9, fmax=500e-9)
     print("E = %.2e Pa" % E)
 
+    # plot trace and fit
+    fig1, ax1 = fc.PlotFit()
+    fig1.suptitle("Plot Fit")
+
     plt.show()

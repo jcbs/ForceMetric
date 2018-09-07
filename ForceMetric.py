@@ -10,6 +10,7 @@ import itertools
 import numpy as np
 import multiprocessing
 import h5py
+import pandas as pd
 from tqdm import tqdm
 from igor import binarywave as ibw
 from scipy import optimize as opt
@@ -1246,6 +1247,13 @@ class StaticYoung(ContactPoint):
               beta=False,
               constant='force'):
 
+        self.constant = constant
+
+        if constant == 'force':
+            self.limits = (fmin, fmax)
+        elif constant == 'indentation':
+            self.limits = (imin, imax)
+
         if ind is None:
             ind = 1*self.indentation.Trace()
 
@@ -1308,10 +1316,8 @@ class StaticYoung(ContactPoint):
                 p = opt.curve_fit(NeoHookeanBead, ind[r0:r1], f[r0:r1], p0=p0)
                 E = p / G
             else:
-                fit = opt.leastsq(errfunc, p0,
-                                    args=(f[r0:r1],
-                                        ind[r0:r1],
-                                        gamma))
+                fit = opt.leastsq(errfunc, p0, args=(f[r0:r1], ind[r0:r1],
+                                                     gamma))
                 exp = IndentationFit(fit[0], ind[r0:r1], gamma)
                 self.chi_sq = chisquare(f[r0:r1]*1e9, exp*1e9, ddof=1)
                 self.fit = fit
@@ -1320,8 +1326,34 @@ class StaticYoung(ContactPoint):
             print('Unable to fit %s' % self.path)
             E = np.nan
 
+        self.gamma = gamma
         self.E = E
         return E
+
+    def PlotFit(self):
+        rmin, rmax = self.limits
+        ind = self.indentation.Trace()
+        force = self.force.Trace()
+        p = self.fit[0]
+        gamma = self.gamma
+
+        if self.constant == 'indentation':
+            ix_min = nearestPoint(ind, rmin)
+            ix_max = nearestPoint(ind, rmax)
+        elif self.constant == 'force':
+            ix_min = nearestPoint(force, rmin)
+            ix_max = nearestPoint(force, rmax)
+
+        fig, ax = plt.subplots()
+        ax.plot(ind * 1e6, force * 1e9, c='r', lw=2)
+        ax.plot(ind[ix_min:ix_max] * 1e6, IndentationFit(p, ind[ix_min:ix_max],
+                                                         gamma=gamma) * 1e9,
+                c='k', ls='--', lw=1.3)
+        ax.set_xlabel(r"$\delta$ (um)")
+        ax.set_ylabel(r"$F$ (nN)")
+        ax.grid()
+
+        return fig, ax
 
 
 class ForceCurve(StaticYoung, Wave):
@@ -1356,19 +1388,16 @@ class ForceCurve(StaticYoung, Wave):
             if "Phas2" in self.labels:
                 self.phase2 = FDData(self.getData('Phas2'), self.idxs)
 
-
     def load(self, path):
         """Loads ibw file if no path was given when creating the instance"""
         self.__init__(path)
 
-    def correct(self, stds=4, method='fiv',
-                fitrange=0.6, cix=None,
-                fmin=25e-9, fmax=100e-9,
-               surface_effect=None, surface_range=0.1):
+    def correct(self, stds=4, method='fiv', fitrange=0.6, cix=None, fmin=25e-9,
+                fmax=100e-9, surface_effect=None, surface_range=0.1):
         """Determins the contact point with your favourite method"""
         # cdef int contactidx
         if cix:
-            contactidx=cix
+            contactidx = cix
         else:
             contactidx = self.getCP(stds=stds, method=method,
                                     surface_effect=surface_effect,
@@ -1533,9 +1562,13 @@ class ForceCurve(StaticYoung, Wave):
                 plt.show()
                 return f, ax1, ax2, ax3
 
+
 class Multicurve(ForceCurve):
-    def __init__(self, path):
+    def __init__(self, path, load=True):
         ForceCurve.__init__(self, path)
+
+        if load:
+            self.LoadCurves()
 
     def LoadCurves(self, trace=True):
         p = self.path
@@ -1545,8 +1578,10 @@ class Multicurve(ForceCurve):
         l1 = len(ext)*-1 - 1
         l0 = l1 - 4
         fn = fnb.replace(fnb[l0:l1], '*')
-        print('fn = %s' %fn)
+        print('fn = %s' % fn)
         files = np.sort(glob.glob(dirname + os.sep + fn))
+        mask = np.array([IdentifyScanMode(f) for f in files]) == 'ForceCurve'
+        files = files[mask]
         self.files = files
 
         num_cores = multiprocessing.cpu_count()
@@ -1556,6 +1591,28 @@ class Multicurve(ForceCurve):
             delayed(process1)(point, trace) for point in tqdm(files))
         print("All curves in cache.")
         self.curves = curves
+
+    def CorrectAll(self, method='fiv', stds=4, fitrange=0.6, cix=None,
+                   fmin=25e-9, fmax=100e-9, surface_effect=None,
+                   surface_range=0.1):
+        for fc in self.curves:
+            fc.correct(method=method, stds=stds, fitrange=fitrange, cix=cix,
+                       fmin=fmin, fmax=fmax, surface_effect=surface_effect,
+                       surface_range=surface_range)
+
+    def FitAll(self, model='Hertz', fmin=1e-9, fmax=20e-9, imin=5e-9,
+               imax=50e-9, R=10e-6, alpha=15, beta=False, constant='force'):
+        E = []
+        for fc in self.curves:
+            try:
+                E.append(fc.Young(model=model, fmin=fmin, fmax=fmax, imin=imin,
+                                  imax=imax, R=R, alpha=alpha, beta=beta,
+                                  constant=constant))
+            except:
+                print("Couldn't fit %s." % fc.path)
+                E.append(np.nan)
+
+        self.E = np.array(E)
 
     def Scatter(self, method='fiv',):
         if not self.curves:
@@ -1573,6 +1630,48 @@ class Multicurve(ForceCurve):
         self.force = np.array(force)
         self.indentation = np.array(indentation)
 
+    def PlotAverageFit(self):
+        Fits = []
+        for fc in self.curves:
+            try:
+                Fits.append(fc.fit[0])
+            except:
+                np.nan
+
+        self.Fit = np.nanmean(Fits, axis=0)
+        rmin, rmax = self.curves[0].limits
+        ind = np.linspace(self.indentation.min(), self.indentation.max(), 200)
+        indent = self.indentation
+        idxs = indent.argsort()
+        indent = indent[idxs]
+        force = self.force[idxs]
+        p = self.Fit
+        gamma = self.curves[0].gamma
+
+        if self.curves[0].constant == 'indentation':
+            ix_min = nearestPoint(ind, rmin)
+            ix_max = nearestPoint(ind, rmax)
+        elif self.curves[0].constant == 'force':
+            ix_min = nearestPoint(force, rmin)
+            ix_max = nearestPoint(force, rmax)
+            ind0 = indent[ix_min]
+            ind1 = indent[ix_max]
+            ix_min = nearestPoint(ind, ind0)
+            ix_max = nearestPoint(ind, ind1)
+
+        fig, ax = plt.subplots()
+        N = int(len(indent) * 0.01)
+        indenta = pd.rolling_mean(indent, window=N)
+        forcea = pd.rolling_mean(force, window=N)
+        ax.plot(indent * 1e6, force * 1e9, 'r.', label='scatter')
+        ax.plot(indenta * 1e6, forcea * 1e9, 'm.', label='rolling mean')
+        ax.plot(ind[ix_min:ix_max] * 1e6, IndentationFit(p, ind[ix_min:ix_max],
+                                                         gamma=gamma) * 1e9,
+                c='k', ls='--', lw=1.3, label='fit')
+        ax.set_xlabel(r"$\delta$ (um)")
+        ax.set_ylabel(r"$F$ (nN)")
+        ax.grid()
+        plt.legend(loc='best')
 
 
 class ForceMap:
