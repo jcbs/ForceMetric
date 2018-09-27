@@ -9,7 +9,7 @@ import glob
 import itertools
 import numpy as np
 import multiprocessing
-import h5py
+import h5py as h5
 import pandas as pd
 from tqdm import tqdm
 from igor import binarywave as ibw
@@ -80,7 +80,6 @@ def DynamicCoefficients(A1, phi1, omega, A1_norm, phi1_norm, k, Q):
 
     A1_free = A1_norm[0]
     A1_near = A1_norm[1]
-    phi1_free = phi1_norm[0]
     phi1_near = phi1_norm[1]
 
     C1 = A1_free * k/Q * np.sqrt(1-1. / (2*Q)**2)
@@ -88,6 +87,7 @@ def DynamicCoefficients(A1, phi1, omega, A1_norm, phi1_norm, k, Q):
     k_s = C1 * (np.cos(phi1)/A1 - np.cos(phi1_near)/A1_near)
     c_s = C1 / omega * (np.sin(phi1)/A1 - np.sin(phi1_near)/A1_near)
     return k_s, c_s
+
 
 def IndentationFit(p, delta, gamma=2):
     """
@@ -127,8 +127,8 @@ def errfunc(p, data, delta, gamma=2):
     gamma : geometric exponent according to the contact model, e.g. for Hertz
         gamma = 1.5
     data : ndarray of floats
-        force data to fit. This is usually from an indentation experiment but it
-        can also be simulated
+        force data to fit. This is usually from an indentation experiment but
+        it can also be simulated
 
     Returns
     -------
@@ -204,7 +204,7 @@ def SlopeCorrection(alpha, beta):
         :math:`F_{new} = F \cdot f`.
     """
     e = eccentricity(alpha, beta)
-    c1 = 1./(1- (np.tan(beta)**2*np.tan(alpha)**2))
+    c1 = 1./(1 - (np.tan(beta)**2*np.tan(alpha)**2))
     f = c1/np.cos(beta)/ellipk(e)*(np.pi - c1*ellipe(e)/np.cos(beta))
     return f
 
@@ -240,12 +240,14 @@ def MaximumSlope(height, dimx=20):
     theta = np.arcsin(m/(np.sqrt(2+m**2)))
     return theta
 
+
 def div0(a, b):
     """returns zeros for division by zero"""
     with np.errstate(divide='ignore', invalid='ignore'):
         c = np.true_divide(a, b)
-        c[ ~ np.isfinite( c )] = 0  # -inf inf NaN
+        c[~ np.isfinite(c)] = 0  # -inf inf NaN
         return c
+
 
 def ROV(x, I, smooth=True):
     """
@@ -268,8 +270,8 @@ def ROV(x, I, smooth=True):
         x = gaussian_filter1d(x, 0.1*I)
 
     N = len(x)
-    low = np.array([x[i:i+I].std() for i in range(I,N-I)])
-    high = np.array([x[i-I:i].std() for i in range(I,N-I)])
+    low = np.array([x[i:i+I].std() for i in range(I, N-I)])
+    high = np.array([x[i-I:i].std() for i in range(I, N-I)])
     r = div0(low, high)
     return r
 
@@ -306,8 +308,8 @@ def process3(point, trace=False):
 
 def nearestPoint(x, x0):
     """
-    Determines index of x which is closest to x0. This is necessary if the value
-    one is interested is not in the array.
+    Determines index of x which is closest to x0. This is necessary if the
+    value one is interested is not in the array.
 
     Parameters
     ----------
@@ -363,8 +365,8 @@ class Header(dict):
 class Wave(Header):
     """
     Class for igor binary wave files for better access to data than with the
-    igor module. If igor file was converted to HDF5 this can be read as well and
-    will be in the same structure accessible for easy programming.
+    igor module. If igor file was converted to HDF5 this can be read as well
+    and will be in the same structure accessible for easy programming.
 
     The header information is saved as a dictionary of self, i.e. if you want
     to read the spring constant you can do this by self["SpringConstant"]
@@ -408,11 +410,18 @@ class Wave(Header):
             self.labels = [t.decode("utf-8") for t in tmp]
 
         elif ext == 'hdf5':
-            f = h5py.File(path, 'a')
+            f = h5.File(path, 'a')
             data = f['data']
             header = dict(data.attrs)
-            self.labels = list(data.keys())
-            self.data = np.array([data.get(l) for l in self.labels])
+            self.labels = list(np.array(list(data.get('label')), dtype='U20'))
+
+            if 'scan' in data:
+                self.data = np.rollaxis(np.array(data.get('scan')), -1, 0)
+            elif 'curve' in data:
+                self.data = np.rollaxis(np.array(data.get('curve')), -1, 0)
+
+            # self.labels = list(data.keys())
+            # self.data = np.array([data.get(l) for l in self.labels])
 
         Header.__init__(self, header)
 
@@ -429,6 +438,26 @@ class Wave(Header):
         """
         idx = self.labels.index(key)
         return self.data[idx]
+
+    def WriteHDF5(self, path):
+        h5file = h5.File(path, 'a', driver='core')
+        data_grp = h5file.create_group('data')
+
+        for key in self.keys():
+            data_grp.attrs[key] = self[key]
+
+        if IdentifyScanMode(self.path) == 'Imaging':
+            dat = np.rollaxis(self.data, 0, 3)
+            stype = 'scan'
+        elif IdentifyScanMode(self.path) == 'ForceCurve':
+            dat = np.rollaxis(self.data, 0, 2)
+            stype = 'curve'
+
+        data_grp.create_dataset(stype, data=dat)
+        data_grp.create_dataset('label', data=np.array(self.labels,
+                                                       dtype='S20'))
+        h5file.flush()
+        h5file.close()
 
 
 class FDIndices(object):
@@ -1119,7 +1148,17 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         es = self.MyStorage(model=model)
         return es - ot * el
 
-
+    def CalcAllViscoelastic(self, model='s'):
+        labels = ['storage', 'loss', 'tau', 'eta', 'km', 'kinf']
+        self.labels.extend(labels)
+        storage = self.MyStorage(model=model)
+        loss = self.MyLoss(model=model)
+        tau = self.True_tau(model=model)
+        km = self.True_kinf(model=model)
+        kinf = self.True_km(model=model)
+        eta = tau * km
+        properties = np.array([storage, loss, tau, eta, km, kinf])
+        self.data = np.concatenate((self.data, properties))
 
 
 class ContactPoint(object):
@@ -1129,7 +1168,7 @@ class ContactPoint(object):
     """
 
     def getCP(self, ind=None, f=None, method='fiv', model='h', stds=4,
-              surface_effect=None, surface_range=0.1):
+              surface_effect=None, surface_range=0.1, trace=None):
         """
         Parameters
         ----------
@@ -1151,11 +1190,20 @@ class ContactPoint(object):
         """
         # cdef int idx = 0
 
+        if not trace:
+            trace = self.trace
+
         if ind is None:
-            ind = 1*self.indentation.Trace()
+            if trace:
+                ind = 1*self.indentation.Trace()
+            else:
+                ind = 1*self.indentation.Retrace()
 
         if f is None:
-            f = 1*self.force.Trace()
+            if trace:
+                f = 1*self.force.Trace()
+            else:
+                f = 1*self.force.Retrace()
 
         if surface_effect:
             for t in range(2):
@@ -1247,18 +1295,32 @@ class StaticYoung(ContactPoint):
               beta=False,
               constant='force'):
 
-        self.constant = constant
-
         if constant == 'force':
             self.limits = (fmin, fmax)
         elif constant == 'indentation':
             self.limits = (imin, imax)
 
+        try:
+            trace = self.trace
+        except:
+            trace = True
+
+        if trace:
+            shift = 0
+        else:
+            shift = 1
+
         if ind is None:
-            ind = 1*self.indentation.Trace()
+            if trace:
+                ind = 1*self.indentation.Trace()
+            else:
+                ind = 1*self.indentation.Retrace()
 
         if f is None:
-            f = 1*self.force.Trace()
+            if trace:
+                f = 1*self.force.Trace()
+            else:
+                f = 1*self.force.Retrace()
 
         idx = self.getCP(method='fiv', ind=1*ind, f=1*f)
 
@@ -1276,15 +1338,30 @@ class StaticYoung(ContactPoint):
         r0 = int(0.2 * len(ind[idx:])) + idx
         r1 = int(0.8 * len(ind[idx:])) + idx
 
-        if constant=='indentation':
-            r0 = i0
-            r1 = i1
-        elif constant=='force':
-            r0 = f0
-            r1 = f1
+        # if trace:
+            # r0 = int(0.2 * len(ind[idx:])) + idx
+            # r1 = int(0.8 * len(ind[idx:])) + idx
+        # else:
+            # r1 = int(0.2 * len(ind[idx:])) + idx
+            # r0 = int(0.8 * len(ind[idx:])) + idx
+
+        I_ix = np.roll([i0, i1], shift)
+        F_ix = np.roll([f0, f1], shift)
+
+        self.constant = constant
+
+        if constant == 'indentation':
+            r0 = I_ix[0]
+            r1 = I_ix[1]
+        elif constant == 'force':
+            r0 = F_ix[0]
+            r1 = F_ix[1]
         else:
             r0 = r0
             r1 = r1
+
+        print(r0, r1)
+        print(len(ind[r0:r1]), len(f[r0:r1]))
 
         if model in ['h', 'H', 'hertz', 'Hertz']:
             gamma = 1.5
@@ -1331,9 +1408,19 @@ class StaticYoung(ContactPoint):
         return E
 
     def PlotFit(self):
+        if self.trace:
+            shift = 0
+        else:
+            shift = 1
+
         rmin, rmax = self.limits
-        ind = self.indentation.Trace()
-        force = self.force.Trace()
+        if self.trace:
+            ind = self.indentation.Trace()
+            force = self.force.Trace()
+        else:
+            ind = self.indentation.Retrace()
+            force = self.force.Retrace()
+
         p = self.fit[0]
         gamma = self.gamma
 
@@ -1343,6 +1430,8 @@ class StaticYoung(ContactPoint):
         elif self.constant == 'force':
             ix_min = nearestPoint(force, rmin)
             ix_max = nearestPoint(force, rmax)
+
+        ix_min, ix_max = np.roll([ix_min, ix_max], shift)
 
         fig, ax = plt.subplots()
         ax.plot(ind * 1e6, force * 1e9, c='r', lw=2)
@@ -1791,47 +1880,4 @@ class ForceMap:
                     print("Can't fit E")
                     Emap[i,j] = np.nan
         return Emap
-
-    # def GofMap(self):
-    # exp = np.array(self.experiment)
-    # curves = np.array(self.curves)
-    # N = exp.shape[0]
-    # M = exp.shape[1]
-    # gof = np.zeros((N,M))
-    # for i in np.arange(N):
-    # for j in np.arange(M):
-    # try:
-    # fc = curves[i,j]
-    # chi  = fc.chi_sq[0]
-    # gof[i,j] = chi
-    # except:
-    # print("No chi_square available")
-    # gof[i,j] = np.nan
-    # return gof
-
-    # def AdhesionMap(self):
-    # exp = np.array(self.experiment)
-    # curves = np.array(self.curves)
-    # N = exp.shape[0]
-    # M = exp.shape[1]
-    # Admap = np.zeros((N,M))
-    # for i in np.arange(N):
-    # for j in np.arange(M):
-    # try:
-    # fc = curves[i,j]
-    # ad = fc.adhesion
-    # Admap[i,j] = ad
-    # except:
-    # print("No Adhesion available")
-    # Admap[i,j] = np.nan
-    # return Admap
-
-
-    # def AverageCurve(self, trace=False):
-    # num_cores = multiprocessing.cpu_count()
-    # exp = self.experiment
-    # FD = [Parallel(n_jobs=num_cores)(
-    # delayed(process3)(point, trace) for point in lines)
-    # for lines in exp]
-    # return np.array(FD).mean(0).mean(0)
 
