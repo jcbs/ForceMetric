@@ -10,7 +10,7 @@ import numpy as np
 import seaborn as sb
 
 
-plot_idx = True
+plot_idx = True # if False plot indentation depth instead of qty vs index
 media = '/media/scro2366/MicroscopyData/Data/AFM/%s'
 sb.set_style("whitegrid")
 yes = ['y', 'Y', 'j', 'J', 'Yes', 'yes']
@@ -97,12 +97,14 @@ for fc in para_fc:
         if i in [-1]:
             print('correction loop')
             print(fc.force.Trace().shape)
-            if i == 7:
-                offset = 5700
+            # fc.contactidx = 0
+            if i == 5:
+                offset = 5910
                 fc.force.data[:offset] = fc.force.data[offset + 1]
             elif i in [1, 2, 3]:
                 offset = 3000
                 fc.force.data[:offset] = fc.force.data[offset + 1]
+            fc.correct(method='fiv', stds=6)
         else:
             fc.correct(method='fiv', stds=6)
         ind = fc.indentation.Trace()*1e6
@@ -114,7 +116,13 @@ for fc in para_fc:
         # The offsets are for the far (off0) and near correction (off1) in
         # pixels
         off0 = 30
-        off1 = 10
+        off1 = 100
+
+        # Surface correction for individual curves as above with the contact
+        # point
+        if i in [-1]:
+            off0 = 400
+            off1 = 300
 
         A1_free.append(a1[off0])
         A1_near.append(a1[idx-off1])
