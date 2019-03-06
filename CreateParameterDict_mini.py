@@ -2,6 +2,7 @@
 
 import os
 import glob
+import ForceMetric as fm
 from ForceMetric import ForceCurve, ParameterDict, IdentifyScanMode
 from matplotlib import pyplot as plt
 from pprint import pprint
@@ -9,10 +10,11 @@ import numpy as np
 import seaborn as sb
 
 
-media = '/media/jacob/MicroscopyData/Data/AFM/%s'
+plot_idx = True
+media = '/media/scro2366/MicroscopyData/Data/AFM/%s'
 sb.set_style("whitegrid")
 yes = ['y', 'Y', 'j', 'J', 'Yes', 'yes']
-sample = 'Arabidopsis/131Y/0001/DEX/2019-01-15/Sample09_LG_7d24h/%s'
+sample = 'Arabidopsis/131Y/0001/DEX/2019-01-15/Sample01_LG_7d24h/%s'
 path = media % (sample % '*.ibw')
 
 # The data of the images
@@ -154,7 +156,13 @@ for fc in para_fc:
         print("E0: %.2e Pa" % E0)
 
     fig, ax = plt.subplots()
-    ax.plot(ind, f*1e9, ind, p1, ind, a1)
+    ix = fm.nearestPoint(ind, 0)
+    if plot_idx:
+        N = np.arange(len(ind))
+        ax.plot(N, f*1e9, N, p1, N, a1)
+        ax.plot(N[ix], p1[ix], 'bo')
+    else:
+        ax.plot(ind, f*1e9, ind, p1, ind, a1)
     ax.set_title("Curve no %i" % i)
     try:
         plt.plot(ind, f*1e9, ind, p2, ind, a2)
