@@ -4,6 +4,7 @@ import numpy as np
 import itertools
 from PIL import Image, ImageDraw
 import scipy.ndimage as ndi
+import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.optimize import leastsq
 from scipy.interpolate import interp2d
@@ -18,11 +19,120 @@ from scipy.signal import argrelmin, argrelmax
 from itertools import product
 from numpy import empty, roll
 from collections import defaultdict
+from mpl_toolkits.mplot3d import axes3d
+import time
+from datetime import datetime
+
+
+def CalcIgorTime(t):
+    t0_igor = datetime(1904, 1, 1, 0, 0, 0)
+    t0_linux = datetime(1970, 1, 1, 0, 0, 0)
+    delta_t = t0_linux - t0_igor
+    new_t = t - delta_t.total_seconds()
+    return new_t
+
+
+def CalcCellLength(cell, px_size):
+    n1 = np.mean(cell['apical_wall']['nodes'], axis=0)
+    n2 = np.mean(cell['basal_wall']['nodes'], axis=0)
+    d = (n1 - n2) * px_size
+    length = np.linalg.norm(d)
+    return length
+
+
+def CalcLenght(nodes, px_size):
+    diff = np.diff(nodes, axis=0) * px_size
+    length = np.linalg.norm(diff)
+    return length
+
+
+def GetWallData(sample):
+    ana = sample.analysis
+    s0 = sample.positions[0].scans[0]
+    labels = s0.labels
+    px_size = s0['ScanSize'] / s0['PointsLines']
+    properties = ['storage', 'loss', 'losstan']
+    columns = list(np.copy(properties))
+    columns.extend(['length', 'direction'])
+    ixs = [labels.index(p) for p in properties]
+
+    WallData = pd.DataFrame(columns=columns)
+
+    for wall in ana.keys():
+        direction = ana[wall]
+        wdata = pd.DataFrame(columns=columns)
+        for wall_no in direction.keys():
+            df = pd.DataFrame(data=[np.nanmean(direction[wall_no]['data'][ixs],
+                                               axis=1)], columns=properties)
+            nodes = direction[wall_no]['nodes']
+            df['length'] = CalcLenght(nodes, px_size)
+            df['direction'] = wall
+            wdata = wdata.append(df)
+
+        WallData = WallData.append(wdata)
+
+    return WallData
+
+
+def GetCellData(sample, date=True, time=True):
+    ana = sample.analysis
+
+    if 'cells' in ana.keys():
+        cells = sample.analysis['cells']
+        s0 = sample.positions[0].scans[0]
+        labels = s0.labels
+        px_size = s0['ScanSize'] / s0['PointsLines']
+        properties = ['storage', 'loss', 'losstan']
+        columns = list(np.copy(properties))
+
+        if date:
+            columns.extend(['length', 'cell', 'direction', 'date'])
+        else:
+            columns.extend(['length', 'cell', 'direction'])
+
+        ixs = [labels.index(p) for p in properties]
+
+        CellData = pd.DataFrame(columns=columns)
+
+        for cell in cells.keys():
+            Cell = cells[cell]
+            cdata = pd.DataFrame(columns=columns)
+            print('\n', cell)
+            for cell_no in Cell.keys():
+                print(cell_no)
+                if cell_no == 'cell_ratio':
+                    df = pd.DataFrame(data=[Cell[cell_no][ixs]],
+                                      columns=properties)
+                    df['length'] = CalcCellLength(Cell, px_size)
+                    df['direction'] = cell_no
+                    df['cell'] = cell
+                    cdata = cdata.append(df)
+                    if date:
+                        cdata['date'] = sample.path.split('/')[1]
+                    if time:
+                        cdata['time'] = sample.time
+                else:
+                    df = pd.DataFrame(data=[np.nanmean(Cell[cell_no]['data'][ixs],
+                                                       axis=1)], columns=properties)
+                    df['length'] = CalcCellLength(Cell, px_size)
+                    df['direction'] = cell_no
+                    df['cell'] = cell
+                    cdata = cdata.append(df)
+                    if date:
+                        cdata['date'] = sample.path.split('/')[1]
+                        cdata['time'] = sample.time
+
+            CellData = CellData.append(cdata)
+        return CellData
+    else:
+        print('No cells available')
 
 
 def RadarPlot(data, labels, category, idx=0):
     grp = data.groupby(category)
-    stats = grp.mean().loc[idx, labels].values
+    means = grp.mean()
+    idx = means.index
+    stats = np.nanmean(means.loc[idx, labels].values, axis=0)
     angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
     stats = np.concatenate((stats, [stats[0]]))
     angles = np.concatenate((angles, [angles[0]]))
@@ -36,7 +146,10 @@ def RadarPlot(data, labels, category, idx=0):
 
 def AddRadarPlot(data, labels, category, idx, ax):
     grp = data.groupby(category)
-    stats = grp.mean().loc[idx, labels].values
+    means = grp.mean()
+    idx = means.index
+    stats = np.nanmean(means.loc[idx, labels].values, axis=0)
+    # stats = grp.mean().loc[idx, labels].values
     angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
     stats = np.concatenate((stats, [stats[0]]))
     angles = np.concatenate((angles, [angles[0]]))
@@ -81,8 +194,166 @@ def toggle(switch):
     return switch
 
 
+def concat_images_corner(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
+                  ontop=True, adjust_z=False):
+    """
+    Combines two color image ndarrays side-by-side.
+    """
+    if direction == 'horizontal':
+        max_dim = np.maximum.reduce([imga.shape, imgb.shape])
+
+        offset = (abs(yoffset), abs(xoffset))
+        tmp_offset = np.array(offset)
+
+        # if (max_dim == imgb.shape).all():
+            # tmp = np.copy(imgb)
+            # imgb = np.copy(imga)
+            # imga = np.copy(tmp)
+            # ontop = toggle(ontop)
+            # xoffset *= -1
+            # yoffset *= -1
+
+        # center_new = np.array(np.divide(max_dim, 2), dtype=int)
+        new_img = np.full(np.add(max_dim, np.abs(offset)), np.nan)
+
+        Sa0 = slice(0, imga.shape[0])
+        Sa1 = slice(0, imga.shape[1])
+        Sb0 = slice(abs(yoffset), abs(yoffset) + imgb.shape[0])
+        Sb1 = slice(abs(xoffset), abs(xoffset) + imgb.shape[1])
+
+        xdir = np.sign(xoffset)
+        ydir = np.sign(yoffset)
+
+        if ydir == 0:
+            ydir = 1
+        if xdir == 0:
+            xdir = 1
+
+        imga = imga[::ydir, ::xdir]
+        imgb = imgb[::ydir, ::xdir]
+
+        if adjust_z:
+            top_img = 1 * new_img
+            top_img[Sa0, Sa1] = imga
+            top_img[Sb0, Sb1] = imgb
+            low_img = 1 * new_img
+            low_img[Sb0, Sb1] = imgb
+            low_img[Sa0, Sa1] = imga
+
+            diff = top_img - low_img
+            m = np.nanmean(diff)
+            s = np.nanstd(diff)
+            mask = np.abs(diff) < m + s
+            diff[mask] = np.nan
+            add = np.nanmean(diff)
+
+            print(add)
+
+            imgb -= add
+
+        if ontop:
+            new_img[Sa0, Sa1] = imga
+            new_img[Sb0, Sb1] = imgb
+        else:
+            new_img[Sb0, Sb1] = imgb
+            new_img[Sa0, Sa1] = imga
+
+        return new_img[::ydir, ::xdir]
+
+
+def concat_3dimages_corners(imga, imgb, xoffset=0, yoffset=0, zoffset=0,
+                    transpose=True, ontop=True, center_offset=True,
+                    adjust_z=(0, 1)):
+    """
+    Combines two color image ndarrays side-by-side.
+    """
+    print("Concating images with reference point being the lower left corner")
+    if transpose:
+        print("Transpose images")
+        imga = np.transpose(imga, axes=(0, 2, 1))
+        imgb = np.transpose(imgb, axes=(0, 2, 1))
+
+    offset = (abs(zoffset), abs(yoffset), abs(xoffset))
+    max_dim = np.maximum.reduce([imga.shape, np.add(imgb.shape, offset)])
+
+    # center_a = np.array(np.divide(imga.shape, 2), dtype=int)
+    # center_b = np.array(np.divide(imgb.shape, 2), dtype=int)
+
+    # if (max_dim == imgb.shape).all():
+        # tmp = np.copy(imgb)
+        # imgb = np.copy(imga)
+        # imga = np.copy(tmp)
+        # ontop = toggle(ontop)
+        # xoffset *= -1
+        # yoffset *= -1
+        # zoffset *= -1
+
+    # tmp_offset = np.array(offset)
+    # tmp_offset[tmp_offset > 0] = 0
+    # new_img = np.full(np.add(max_dim, np.abs(offset)), np.nan)
+    new_img = np.full(max_dim, np.nan)
+
+    Sa0 = slice(0, imga.shape[0])
+    Sa1 = slice(0, imga.shape[1])
+    Sa2 = slice(0, imga.shape[2])
+    Sb0 = slice(abs(zoffset), abs(zoffset) + imgb.shape[0])
+    Sb1 = slice(abs(yoffset), abs(yoffset) + imgb.shape[1])
+    Sb2 = slice(abs(xoffset), abs(xoffset) + imgb.shape[2])
+
+    xdir = np.sign(xoffset)
+    ydir = np.sign(yoffset)
+    zdir = np.sign(zoffset)
+
+    if ydir == 0:
+        ydir = 1
+    if xdir == 0:
+        xdir = 1
+    if zdir == 0:
+        zdir = 1
+
+    imga = imga[::zdir, ::ydir, ::xdir]
+    imgb = imgb[::zdir, ::ydir, ::xdir]
+
+    if adjust_z:
+        for ix in adjust_z:
+            top_img = 1 * new_img[ix]
+            top_img[Sa1, Sa2] = imga[ix]
+            top_img[Sb1, Sb2] = imgb[ix]
+            low_img = 1 * new_img[ix]
+            low_img[Sb1, Sb2] = imgb[ix]
+            low_img[Sa1, Sa2] = imga[ix]
+
+            diff = top_img - low_img
+            m = np.nanmean(diff)
+            s = np.nanstd(diff)
+            mask = np.abs(diff) < m + s
+            diff[mask] = np.nan
+            add = np.nanmean(diff)
+
+            print(add)
+
+            imgb[ix] -= add
+
+    print("new_img shape: ", new_img.shape)
+
+    if ontop:
+        new_img[Sa0, Sa1, Sa2] = imga
+        new_img[Sb0, Sb1, Sb2] = imgb
+    else:
+        new_img[Sb0, Sb1, Sb2] = imgb
+        new_img[Sa0, Sa1, Sa2] = imga
+
+    new_img
+
+    if transpose:
+        print("Transpose back")
+        return np.transpose(new_img[::zdir, ::ydir, ::xdir], axes=(0, 2, 1))
+    else:
+        return new_img[::zdir, ::ydir, ::xdir]
+
+
 def concat_images(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
-                  ontop=True):
+                  ontop=True, adjust_z=False, center_offset=True):
     """
     Combines two color image ndarrays side-by-side.
     """
@@ -93,7 +364,8 @@ def concat_images(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
         center_b = np.array(np.divide(imgb.shape, 2), dtype=int)
         offset = (abs(yoffset), abs(xoffset))
 
-        new_offset = np.subtract(center_a, np.add(center_b, offset))
+        if center_offset:
+            new_offset = np.subtract(center_a, np.add(center_b, offset))
 
         if (max_dim == imgb.shape).all():
             tmp = np.copy(imgb)
@@ -134,6 +406,25 @@ def concat_images(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
         imga = imga[::ydir, ::xdir]
         imgb = imgb[::ydir, ::xdir]
 
+        if adjust_z:
+            top_img = 1 * new_img
+            top_img[Sa0, Sa1] = imga
+            top_img[Sb0, Sb1] = imgb
+            low_img = 1 * new_img
+            low_img[Sb0, Sb1] = imgb
+            low_img[Sa0, Sa1] = imga
+
+            diff = top_img - low_img
+            m = np.nanmean(diff)
+            s = np.nanstd(diff)
+            mask = np.abs(diff) < m + s
+            diff[mask] = np.nan
+            add = np.nanmean(diff)
+
+            print(add)
+
+            imgb -= add
+
         if ontop:
             new_img[Sa0, Sa1] = imga
             new_img[Sb0, Sb1] = imgb
@@ -142,6 +433,192 @@ def concat_images(imga, imgb, xoffset=0, yoffset=0, direction='horizontal',
             new_img[Sa0, Sa1] = imga
 
         return new_img[::ydir, ::xdir]
+
+
+def concat_3dimages(imga, imgb, xoffset=0, yoffset=0, zoffset=0,
+                    transpose=True, ontop=True, center_offset=True,
+                    adjust_z=(0, 1)):
+    """
+    Combines two color image ndarrays side-by-side.
+    """
+    if transpose:
+        print("Transpose images")
+        imga = np.transpose(imga, axes=(0, 2, 1))
+        imgb = np.transpose(imgb, axes=(0, 2, 1))
+
+    max_dim = np.maximum.reduce([imga.shape, imgb.shape])
+
+    center_a = np.array(np.divide(imga.shape, 2), dtype=int)
+    center_b = np.array(np.divide(imgb.shape, 2), dtype=int)
+    offset = (abs(zoffset), abs(yoffset), abs(xoffset))
+
+    if center_offset:
+        new_offset = np.subtract(center_a, np.add(center_b, offset))
+    else:
+        new_offset = np.array(offset)
+
+    if (max_dim == imgb.shape).all():
+        tmp = np.copy(imgb)
+        imgb = np.copy(imga)
+        imga = np.copy(tmp)
+        ontop = toggle(ontop)
+        xoffset *= -1
+        yoffset *= -1
+        zoffset *= -1
+
+    new_offset[new_offset > 0] = 0
+    center_new = np.array(np.divide(max_dim, 2), dtype=int)
+    new_img = np.full(np.add(max_dim, np.abs(new_offset)), np.nan)
+
+    Sa0 = slice(int(center_new[0] - imga.shape[0]/2 + 0.5),
+                int(center_new[0] + imga.shape[0]/2 + 0.5))
+    Sa1 = slice(int(center_new[1] - imga.shape[1]/2 + 0.5),
+                int(center_new[1] + imga.shape[1]/2 + 0.5))
+    Sa2 = slice(int(center_new[2] - imga.shape[2]/2 + 0.5),
+                int(center_new[2] + imga.shape[2]/2 + 0.5))
+    Sb0 = slice(int(center_new[0] + abs(zoffset) - imgb.shape[0]/2 + 0.5),
+                int(center_new[0] + abs(zoffset) + imgb.shape[0]/2 + 0.5))
+    Sb1 = slice(int(center_new[1] + abs(yoffset) - imgb.shape[1]/2 + 0.5),
+                int(center_new[1] + abs(yoffset) + imgb.shape[1]/2 + 0.5))
+    Sb2 = slice(int(center_new[2] + abs(xoffset) - imgb.shape[2]/2 + 0.5),
+                int(center_new[2] + abs(xoffset) + imgb.shape[2]/2 + 0.5))
+
+    xdir = np.sign(xoffset)
+    ydir = np.sign(yoffset)
+    zdir = np.sign(zoffset)
+
+    if ydir == 0:
+        ydir = 1
+    if xdir == 0:
+        xdir = 1
+    if zdir == 0:
+        zdir = 1
+
+    imga = imga[::zdir, ::ydir, ::xdir]
+    imgb = imgb[::zdir, ::ydir, ::xdir]
+
+    if adjust_z:
+        for ix in adjust_z:
+            top_img = 1 * new_img[ix]
+            top_img[Sa1, Sa2] = imga[ix]
+            top_img[Sb1, Sb2] = imgb[ix]
+            low_img = 1 * new_img[ix]
+            low_img[Sb1, Sb2] = imgb[ix]
+            low_img[Sa1, Sa2] = imga[ix]
+
+            diff = top_img - low_img
+            m = np.nanmean(diff)
+            s = np.nanstd(diff)
+            mask = np.abs(diff) < m + s
+            diff[mask] = np.nan
+            add = np.nanmean(diff)
+
+            print(add)
+
+            imgb[ix] -= add
+
+    print("new_img shape: ", new_img.shape)
+
+    if ontop:
+        new_img[Sa0, Sa1, Sa2] = imga
+        new_img[Sb0, Sb1, Sb2] = imgb
+    else:
+        new_img[Sb0, Sb1, Sb2] = imgb
+        new_img[Sa0, Sa1, Sa2] = imga
+
+    if transpose:
+        print("Transpose back")
+        return np.transpose(new_img[::zdir, ::ydir, ::xdir], axes=(0, 2, 1))
+    else:
+        return new_img[::zdir, ::ydir, ::xdir]
+
+
+class DraggableImage:
+    def __init__(self, img):
+        self.img = img
+        self.press = None
+
+    def connect(self):
+        'connect to all the events we need'
+        self.cidpress = self.img.figure.canvas.mpl_connect(
+            'button_press_event', self.on_press)
+        self.cidrelease = self.img.figure.canvas.mpl_connect(
+            'button_release_event', self.on_release)
+        self.cidmotion = self.img.figure.canvas.mpl_connect(
+            'motion_notify_event', self.on_motion)
+
+    def on_press(self, event):
+        'on button press we will see if the mouse is over us and store some data'
+        if event.inaxes != self.img.axes:
+            return
+
+        contains, attrd = self.img.contains(event)
+        if not contains:
+            return
+        print('event contains', self.img.get_extent())
+        x0, x1, y0, y1 = self.img.get_extent()
+        self.img.set_alpha(0.3)
+        self.press = x0, x1, y0, y1, event.xdata, event.ydata
+
+    def on_motion(self, event):
+        'on motion we will move the img if the mouse is over us'
+        if self.press is None:
+            return
+        if event.inaxes != self.img.axes:
+            return
+        x0, x1, y0, y1,  xpress, ypress = self.press
+        dx = event.xdata - xpress
+        dy = event.ydata - ypress
+        self.img.set_extent([x0 + dx, x1 + dx, y0 + dy, y1 + dy])
+
+        self.img.figure.canvas.draw()
+
+    def on_release(self, event):
+        'on release we reset the press data'
+        self.press = None
+        self.img.set_alpha(1)
+        self.img.figure.canvas.draw()
+
+    def disconnect(self):
+        'disconnect all the stored connection ids'
+        self.rect.figure.canvas.mpl_disconnect(self.cidpress)
+        self.rect.figure.canvas.mpl_disconnect(self.cidrelease)
+        self.rect.figure.canvas.mpl_disconnect(self.cidmotion)
+
+
+class ImageAlignment:
+
+    def __init__(self, imgs):
+        self.imgs = list(imgs)
+        self.drs = []
+
+        for img in self.imgs:
+            dr = DraggableImage(img)
+            dr.connect()
+            self.drs.append(dr)
+
+    def SetOffsets(self, center=False):
+        tmp = []
+
+        if center:
+            centers = []
+            corners = []
+            for dr in self.drs:
+                x0, x1, y0, y1 = dr.img.get_extent()
+                corners.append([x0, x1, y0, y1])
+                # centers.append(np.divide((y1 - y0, x1 - x0, 2)))
+                tmp.append((y0, x0))
+        else:
+            for dr in self.drs:
+                x0, x1, y0, y1 = dr.img.get_extent()
+                tmp.append((y0, x0))
+
+            tmp = np.array(tmp) + 0.5
+            self.offsets = np.array(tmp, dtype=int)
+
+        # self.offsets = np.round(
+            # np.diff(tmp, axis=0).cumsum().reshape(tmp[1:].shape()) - tmp[1:],
+            # 0)
 
 
 class ImageShift(object):
@@ -344,21 +821,39 @@ def UniqueTuple(coord):
     coord = [coord[ix] for ix in unique_index]
     return coord
 
+
 def PlaneSubtraction(data, direction='xy', xdim=20, ydim=20):
     """Does plane fit to AFM data and subtracts it in either x, y or x-y
     direction"""
     img = 1*data
-    dx, dy = img.shape
+    dy, dx = img.shape
     x = np.linspace(0, xdim, dx)
     y = np.linspace(0, ydim, dy)
-    DX, DY = np.meshgrid(y, x)
-    px = np.array([np.polyfit(y, img[i], 1)
-        for i in np.arange(dx)]).mean(axis=0)
-    py = np.array([np.polyfit(x, img[:,i], 1)
-        for i in np.arange(dy)]).mean(axis=0)
+    DX, DY = np.meshgrid(x, y)
+    PX = []
+    PY = []
+
+    for i, j in zip(np.arange(dy), np.arange(dx)):
+        lx = img[i]
+        ly = img[:, j]
+        maskx = np.isnan(lx)
+        masky = np.isnan(ly)
+
+        if len(lx[maskx]) < len(lx):
+            s = np.polyfit(x[~maskx], lx[~maskx], 1)
+            PX.append(s)
+
+        if len(ly[masky]) < len(ly):
+            s = np.polyfit(y[~masky], ly[~masky], 1)
+            PY.append(s)
+
+    px = np.nanmean(PX, axis=0)
+    py = np.nanmean(PY, axis=0)
+    print("x - slope: %.2e, y - slope: %.2e" % (px[0], py[0]))
     print("calculate planes")
     xplane = np.polyval(px, DX)
     yplane = np.polyval(py, DY)
+
     if direction == 'x':
         print('x plane subtraction')
         correction = xplane
@@ -368,8 +863,9 @@ def PlaneSubtraction(data, direction='xy', xdim=20, ydim=20):
     else:
         print('x-y plane subtraction')
         correction = xplane + yplane
+
     corrected = data - correction
-    corrected -= corrected.min()
+    corrected -= np.nanmin(corrected)
     return corrected
 
 def AnticlinalWalls(topo):

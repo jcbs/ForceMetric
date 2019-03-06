@@ -375,15 +375,29 @@ class Wave(Header):
     ----------
     path : str
         path of wave file
+    basefile: hdf5 type
+        required if data is part from an hdf5 file
     Note
     ----
     Only ibw and hdf5 is supported.
     """
-    def __init__(self, path, verbose=0):
+    def __init__(self, path, basefile=None, verbose=0):
         self.path = path
         ext = path.split('.')[-1]
+        N = len(path.split('.'))
+
+        if basefile:
+            f = basefile
 
         if ext == 'ibw':
+            file_type = 'ibw'
+        elif ext == 'hdf5':
+            file_type = 'hdf5'
+
+        if N == 1:
+            file_type = 'hdf5_subgroup'
+
+        if file_type == 'ibw':
             f = ibw.load(path)
             self.wave = f.get('wave')
             H = self.wave.get('note').splitlines()
@@ -409,7 +423,7 @@ class Wave(Header):
 
             self.labels = [t.decode("utf-8") for t in tmp]
 
-        elif ext == 'hdf5':
+        elif file_type == 'hdf5':
             f = h5.File(path, 'a')
             data = f['data']
             header = dict(data.attrs)
@@ -420,8 +434,17 @@ class Wave(Header):
             elif 'curve' in data:
                 self.data = np.rollaxis(np.array(data.get('curve')), -1, 0)
 
-            # self.labels = list(data.keys())
-            # self.data = np.array([data.get(l) for l in self.labels])
+        elif file_type == 'hdf5_subgroup':
+            data = f[path]
+            header = dict(data.attrs)
+
+            if 'scan' in path:
+                lbl_path = path.replace('scan', 'label')
+            elif 'curve' in path:
+                lbl_path = path.replace('curve', 'label')
+
+            self.data = np.rollaxis(np.array(data), -1, 0)
+            self.labels = list(np.array(list(f[lbl_path]), dtype='U20'))
 
         Header.__init__(self, header)
 
@@ -617,8 +640,8 @@ class AFMScan(Wave):
     ----
     Only ibw and hdf5 is supported.
     """
-    def __init__(self, path):
-        Wave.__init__(self, path)
+    def __init__(self, path, basefile=None):
+        Wave.__init__(self, path, basefile)
         self.scan = [self['FastScanSize'],
                      self['SlowScanSize']]
         self.dimensions = self.data.shape[1:]
@@ -1008,13 +1031,15 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
     information.
     """
 
-    def __init__(self, eigenmode=1):
+    def __init__(self, path=None, basefile=None, eigenmode=1):
         self.eigenmode = eigenmode
+        if path:
+            self.load(path, basefile=None)
 
-    def load(self, path):
+    def load(self, path, basefile=None):
         """This loads the file and all parameters"""
         print("Load file: %s" % path)
-        AFMScan.__init__(self, path)
+        AFMScan.__init__(self, path, basefile)
         directory = os.path.dirname(path)
         basename = os.path.basename(path).split('.')[0]
         parapath = directory + os.sep + 'Parameters.npy'
@@ -1067,21 +1092,67 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
             omega0 = self["ResFreq2"] * np.pi * 2
 
         self.F0 = self.getData("DeflectionRetrace") * self["SpringConstant"]
-        DynamicYoung.__init__(self, A, phi,
-                                A_free, phi_free,
-                                A_near, phi_near,
-                                Q, k, omega0, E0)
+        DynamicYoung.__init__(self, A, phi, A_free, phi_free, A_near, phi_near,
+                              Q, k, omega0, E0)
 
-    def tau(self, model='s', blurs=1, blurl=3):
-        es = gaussian_filter(self.Storage(model=model), blurs)
-        el = gaussian_filter(self.Loss(model=model), blurl)
-        dx = 20./256
-        glx, gly = np.gradient(el, dx)
-        glx = gaussian_filter(glx, 1)
-        gly = gaussian_filter(gly, 1)
-        gx, gy = np.gradient(es, dx)
-        g = np.hypot(gx/glx, gy/gly)
-        return g / self.omega0
+    def tau(self, model='s', blurs=0, blurl=0, filt='gauss'):
+        if filt == 'gauss':
+            es = gaussian_filter(self.MyStorage(model=model), blurs)
+            el = gaussian_filter(self.MyLoss(model=model), blurl)
+
+        elif filt == 'fourier':
+            es = self.MyStorage(model=model)
+            fft_es = np.fft.fft2(es)
+            el = self.MyLoss(model=model)
+            fft_el = np.fft.fft2(el)
+
+            mask_es = np.ones(es.shape, dtype=bool)
+            mask_es[blurs:-blurs] = 0
+            fft_es[mask_es] = 0
+            es = np.abs(np.fft.ifft2(fft_es))
+
+            mask_el = np.ones(el.shape, dtype=bool)
+            mask_el[blurl:-blurl] = 0
+            fft_el[mask_el] = 0
+            el = np.abs(np.fft.ifft2(fft_el))
+
+        if self.eigenmode == 2:
+            omega2 = 1 * self.omega0
+            dyna = DynamicMechanicAFMScan(eigenmode=1)
+            dyna.load(self.path)
+            ot = omega2 * dyna.tau(model=model, blurs=blurs, blurl=blurl,
+                                   filt=filt)
+            km = dyna.km(model=model, blurs=blurs, blurl=blurl, filt=filt)
+            elr = el - km * ot / (1 + ot**2)
+            elr[elr < 0] = el[elr < 0]
+            esr = es - km * ot**2 / (1 + ot**2)
+            esr[esr < 0] = es[esr < 0]
+            # elr = el - dyna.MyLoss(model=model)
+            # esr = es - dyna.MyStorage(model=model)
+            el = 1 * elr
+            es = 1 * esr
+
+        omega0 = self.omega0
+        print('omega = %.2e' % omega0)
+        # dx = 20./256
+        # glx, gly = np.gradient(el, dx)
+        # gx, gy = np.gradient(es, dx)
+
+        gx = np.array([np.gradient(es[i], el[i])
+                       for i in range(es.shape[0])])
+        gy = np.array([np.gradient(es[:, i], el[:, i])
+                       for i in range(es.shape[0])]).T
+
+        g = gx * gy
+        nx = len(gx[gx < 0])
+        ny = len(gy[gy < 0])
+        n = len(g[g < 0])
+
+        print("negative values: nx = %i, ny = %i, n = %i" % (nx, ny, n))
+
+        tau_solution = np.hypot(gx, gy) / omega0
+
+        return tau_solution
 
     def True_tau(self, model='s', blurs=0, blurl=0, method='max_gradient'):
         es = gaussian_filter(self.MyStorage(model=model), blurs)
@@ -1103,8 +1174,8 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         glx = gaussian_filter(glx, blurl)
         gly = gaussian_filter(gly, blurl)
         gx, gy = np.gradient(es, dx)
-        
-        if method  == 'max_gradient':
+
+        if method == 'max_gradient':
             g = np.hypot(gx, gy) / np.hypot(glx, gly)
         elif method == 'abs_gradient':
             g = np.hypot(gx/glx, gy/gly)
@@ -1116,8 +1187,8 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
 
         return g / self.omega0
 
-    def km(self, model='s', blurs=1, blurl=3):
-        tau = self.tau(model=model)
+    def km(self, model='s', blurs=0, blurl=0, filt='gauss'):
+        tau = self.tau(model=model, blurs=blurs, blurl=blurl, filt=filt)
         omega = self.omega0
         ot = tau*omega
         el = self.Loss(model=model)
@@ -1131,12 +1202,12 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         el = self.MyLoss(model=model)
         return el * (1 + ot**2) / ot
 
-    def kinf(self, model='s', blurs=1, blurl=3):
-        tau = self.tau(model=model)
+    def kinf(self, model='s', blurs=0, blurl=0, filt='gauss'):
+        tau = self.tau(model=model, blurs=blurs, blurl=blurl, filt=filt)
         omega = self.omega0
         ot = tau*omega
-        el = self.Loss(model=model)
-        es = self.Storage(model=model)
+        el = self.MyLoss(model=model)
+        es = self.MyStorage(model=model)
         return es - ot * el
 
     def True_kinf(self, model='s', blurs=0, blurl=0, method='max_gradient'):
@@ -1149,15 +1220,16 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         return es - ot * el
 
     def CalcAllViscoelastic(self, model='s'):
-        labels = ['storage', 'loss', 'tau', 'eta', 'km', 'kinf']
+        labels = ['storage', 'loss', 'tau', 'eta', 'km', 'kinf', 'losstan']
         self.labels.extend(labels)
         storage = self.MyStorage(model=model)
         loss = self.MyLoss(model=model)
+        losstan = loss / storage
         tau = self.True_tau(model=model)
-        km = self.True_kinf(model=model)
-        kinf = self.True_km(model=model)
+        km = self.True_km(model=model)
+        kinf = self.True_kinf(model=model)
         eta = tau * km
-        properties = np.array([storage, loss, tau, eta, km, kinf])
+        properties = np.array([storage, loss, tau, eta, km, kinf, losstan])
         self.data = np.concatenate((self.data, properties))
 
 
@@ -1447,11 +1519,11 @@ class StaticYoung(ContactPoint):
 
 class ForceCurve(StaticYoung, Wave):
     """Instance for an force-distance experiment"""
-    def __init__(self, path=None):
+    def __init__(self, path=None, basefile=None):
         if path:
-            Wave.__init__(self, path)
+            Wave.__init__(self, path, basefile)
             self.idxs = [int(ix)
-                         for ix in self['Indexes'].strip(',').split(',')]
+                         for ix in self['Indexes'].strip(',').split(',') if ix]
             self.k = self["SpringConstant"]
             self.v = self["Velocity"]
             self.zsnr = FDData(self.getData('ZSnsr'), self.idxs)
