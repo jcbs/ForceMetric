@@ -23,7 +23,7 @@ from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from matplotlib import cm
 from matplotlib.cbook import get_sample_data
-from matplotlib._png import read_png
+#from matplotlib._png import read_png
 from ContactPointDetermination import GradientCP, MultiplyCP, RovCP, FitCP, GofCP
 # from mpl_toolkits.mplot3d import axes3d
 # from mayavi import mlab
