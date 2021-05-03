@@ -1043,7 +1043,7 @@ class DynamicMechanicAFMScan(DynamicYoung, AFMScan):
         directory = os.path.dirname(path)
         basename = os.path.basename(path).split('.')[0]
         parapath = directory + os.sep + 'Parameters.npy'
-        para = np.load(parapath).item()
+        para = np.load(parapath, allow_pickle=True).item()
         self.AddHeaderEntries(para[basename])
         invOLS = self["AmpInvOLS"]
         E0 = self["E0"]
