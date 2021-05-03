@@ -1,4 +1,5 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
+##!/usr/bin/python3
 
 import os
 import glob
@@ -11,7 +12,7 @@ import seaborn as sb
 
 
 plot_idx = True # if False plot indentation depth instead of qty vs index
-media = '/media/scro2366/MicroscopyData/Data/AFM/%s'
+media = '/media/jacob/MicroscopyData/Data/AFM/%s'
 sb.set_style("whitegrid")
 yes = ['y', 'Y', 'j', 'J', 'Yes', 'yes']
 sample = 'Arabidopsis/131Y/0001/DEX/2019-01-15/Sample01_LG_7d24h/%s'
@@ -73,6 +74,7 @@ d0 = []
 para = []
 
 savepath = path % 'Parameters.npy'
+#savepath = '/home/jacob/Desktop/Parameters.npy'
 
 print(os.path.isfile(savepath))
 dictionary = ParameterDict(savepath)

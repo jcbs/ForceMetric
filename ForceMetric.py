@@ -623,7 +623,7 @@ class ParameterDict(object):
     def Write(self, path=None):
         if path:
             self.path = path
-            np.save(self.path, self.parameters)
+            np.save(self.path, self.parameters, allow_pickle=True)
 
 
 class AFMScan(Wave):
