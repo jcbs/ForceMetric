@@ -12,7 +12,7 @@ import multiprocessing
 import h5py as h5
 import pandas as pd
 from tqdm import tqdm
-from igor import binarywave as ibw
+from igor2 import binarywave as ibw
 from scipy import optimize as opt
 from scipy.stats import chisquare
 from scipy.interpolate import interp1d
@@ -660,8 +660,9 @@ class AFMScan(Wave):
             the direction in which the plane fit should be performed, i.e. x,
             y, or xy.
         """
-        if data in self.labels:
-            img = self.getData(data)
+        if isinstance(data, str):
+            if data in self.labels:
+                img = self.getData(data)
         else:
             img = 1*data
             dx, dy = img.shape
